@@ -1,0 +1,37 @@
+{
+  "folders": [
+    {
+      "name": "backend",
+      "path": "backend"
+    },
+    {
+      "name": "frontend",
+      "path": "frontend"
+    },
+    {
+      "name": "docker",
+      "path": "docker"
+    },
+    {
+      "name": "nginx",
+      "path": "nginx"
+    },
+    {
+      "name": "docs",
+      "path": "docs"
+    },
+    {
+      "name": "scripts",
+      "path": "scripts"
+    },
+    {
+      "name": "tests",
+      "path": "tests"
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:backend}\\.venv\\Scripts\\python.exe",
+    "python.terminal.activateEnvironment": true,
+    "python.envFile": "${workspaceFolder:backend}\\.env"
+  }
+}
