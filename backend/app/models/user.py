@@ -1,12 +1,10 @@
-# backend\app\models\user.py
-
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.db.base import ActiveStatusMixin, AuditMixin, Base, UUIDPrimaryKeyMixin
 
 
-class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
+class User(UUIDPrimaryKeyMixin, ActiveStatusMixin, AuditMixin, Base):
     __tablename__ = "users"
 
     user_id: Mapped[str] = mapped_column(
@@ -30,12 +28,6 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     hashed_password: Mapped[str] = mapped_column(
         String(255),
-        nullable=False,
-    )
-
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
         nullable=False,
     )
 

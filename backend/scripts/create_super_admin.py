@@ -22,6 +22,7 @@ async def create_super_admin():
             full_name=settings.SUPER_ADMIN_FULL_NAME,
             hashed_password=hash_password(settings.SUPER_ADMIN_PASSWORD),
             is_superuser=True,
+            created_by="system",
         )
 
         print("Super admin created successfully.")

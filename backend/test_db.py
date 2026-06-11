@@ -5,18 +5,25 @@ from sqlalchemy import text
 from app.db.session import engine
 
 
-async def check_users():
+async def clean_legacy_permissions():
     async with engine.begin() as conn:
-        result = await conn.execute(text("""
-                SELECT user_id, email, full_name, is_superuser
-                FROM users
-                ORDER BY created_at;
+        await conn.execute(text("""
+                UPDATE permissions
+                SET is_active = false,
+                    updated_by = 'system',
+                    updated_at = NOW()
+                WHERE permission_key IN ('company.create', 'company.view');
             """))
 
-        print("Users:")
+        result = await conn.execute(text("""
+                SELECT permission_key, resource_type, resource_key, action, is_active
+                FROM permissions
+                ORDER BY permission_key;
+            """))
+
         for row in result:
             print(row)
 
 
 if __name__ == "__main__":
-    asyncio.run(check_users())
+    asyncio.run(clean_legacy_permissions())
