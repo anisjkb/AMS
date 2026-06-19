@@ -1,10 +1,10 @@
 from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import ActiveStatusMixin, AuditMixin, Base, UUIDPrimaryKeyMixin
+from app.db.base import ActiveStatusMixin, AuditMixin, Base, IntegerPrimaryKeyMixin
 
 
-class User(UUIDPrimaryKeyMixin, ActiveStatusMixin, AuditMixin, Base):
+class User(IntegerPrimaryKeyMixin, ActiveStatusMixin, AuditMixin, Base):
     __tablename__ = "users"
 
     user_id: Mapped[str] = mapped_column(

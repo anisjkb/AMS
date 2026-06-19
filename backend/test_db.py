@@ -5,25 +5,29 @@ from sqlalchemy import text
 from app.db.session import engine
 
 
-async def clean_legacy_permissions():
+async def check_database():
     async with engine.begin() as conn:
-        await conn.execute(text("""
-                UPDATE permissions
-                SET is_active = false,
-                    updated_by = 'system',
-                    updated_at = NOW()
-                WHERE permission_key IN ('company.create', 'company.view');
-            """))
+        result = await conn.execute(
+            text(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema='public'
+                ORDER BY table_name;
+                """
+            )
+        )
 
-        result = await conn.execute(text("""
-                SELECT permission_key, resource_type, resource_key, action, is_active
-                FROM permissions
-                ORDER BY permission_key;
-            """))
+        print("\n========== DATABASE TABLES ==========\n")
 
-        for row in result:
-            print(row)
+        tables = result.fetchall()
+
+        for table in tables:
+            print(table[0])
+
+        print(f"\nTotal Tables : {len(tables)}")
+        print("\nDatabase Connection OK ✅")
 
 
 if __name__ == "__main__":
-    asyncio.run(clean_legacy_permissions())
+    asyncio.run(check_database())

@@ -1,25 +1,24 @@
-import uuid
-
-from sqlalchemy import ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import ActiveStatusMixin, AuditMixin, Base, UUIDPrimaryKeyMixin
+from app.db.base import ActiveStatusMixin, AuditMixin, Base, IntegerPrimaryKeyMixin
 
 
-class UserRole(UUIDPrimaryKeyMixin, ActiveStatusMixin, AuditMixin, Base):
+class UserRole(IntegerPrimaryKeyMixin, ActiveStatusMixin, AuditMixin, Base):
     __tablename__ = "user_roles"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    user_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
 
-    role_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    role_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("roles.id", ondelete="CASCADE"),
         nullable=False,
     )
 
-    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_role"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_user_role"),
+    )

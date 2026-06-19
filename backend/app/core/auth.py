@@ -40,13 +40,13 @@ async def get_current_user(
         if subject is None:
             raise credentials_exception
 
-        user_uuid = uuid.UUID(subject)
+        user_id = int(subject)
 
     except (JWTError, ValueError):
         raise credentials_exception
 
     user_repo = UserRepository(db)
-    user = await user_repo.get_by_id(user_uuid)
+    user = await user_repo.get_by_id(user_id)
 
     if user is None:
         raise credentials_exception

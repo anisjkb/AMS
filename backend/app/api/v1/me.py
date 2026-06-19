@@ -8,8 +8,10 @@ from app.models.permission import Permission
 from app.models.role_permission import RolePermission
 from app.models.user import User
 from app.models.user_role import UserRole
+from app.schemas.navigation import NavigationGroupResponse
+from app.services.navigation_service import NavigationService
 
-router = APIRouter(prefix="/me", tags=["Current User"])
+router = APIRouter(prefix="/me", tags=["Me"])
 
 
 @router.get("/permissions")
@@ -51,3 +53,11 @@ async def my_permissions(
         "user_id": current_user.user_id,
         "permissions": permissions,
     }
+
+@router.get("/navigation", response_model=list[NavigationGroupResponse])
+async def get_my_navigation(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    service = NavigationService(db)
+    return await service.get_navigation(current_user=current_user)

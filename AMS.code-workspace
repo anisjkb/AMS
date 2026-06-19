@@ -5,10 +5,6 @@
       "path": "backend"
     },
     {
-      "name": "frontend",
-      "path": "frontend"
-    },
-    {
       "name": "docker",
       "path": "docker"
     },
@@ -27,6 +23,9 @@
     {
       "name": "tests",
       "path": "tests"
+    },
+    {
+      "path": "frontend"
     }
   ],
   "settings": {

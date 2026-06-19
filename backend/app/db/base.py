@@ -1,24 +1,19 @@
-# backend/app/db/base.py
-
-import uuid
+#app/db/base.py
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
 
 class Base(DeclarativeBase):
     pass
 
-
-class UUIDPrimaryKeyMixin:
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+class IntegerPrimaryKeyMixin:
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        default=uuid.uuid4,
+        index=True,
+        autoincrement=True,
     )
-
 
 class ActiveStatusMixin:
     is_active: Mapped[bool] = mapped_column(
@@ -26,7 +21,6 @@ class ActiveStatusMixin:
         default=True,
         nullable=False,
     )
-
 
 class AuditMixin:
     created_by: Mapped[str | None] = mapped_column(

@@ -1,10 +1,10 @@
 from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import ActiveStatusMixin, AuditMixin, Base, UUIDPrimaryKeyMixin
+from app.db.base import ActiveStatusMixin, AuditMixin, Base, IntegerPrimaryKeyMixin
 
 
-class Permission(UUIDPrimaryKeyMixin, ActiveStatusMixin, AuditMixin, Base):
+class Permission(IntegerPrimaryKeyMixin, ActiveStatusMixin, AuditMixin, Base):
     __tablename__ = "permissions"
 
     permission_key: Mapped[str] = mapped_column(

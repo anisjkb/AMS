@@ -1,0 +1,186 @@
+# app/repositories/branch_repository.py
+
+from sqlalchemy import asc, desc, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.branch import Branch
+from app.models.company import Company
+from app.models.user import User
+from app.schemas.branch import BranchCreate, BranchUpdate
+
+
+class BranchRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def list_paginated(
+        self,
+        page: int,
+        page_size: int,
+        search: str | None,
+        company_id: int | None,
+        is_active: bool | None,
+        sort_by: str,
+        sort_order: str,
+    ):
+        stmt = select(Branch)
+
+        if company_id is not None:
+            stmt = stmt.where(Branch.company_id == company_id)
+
+        if is_active is not None:
+            stmt = stmt.where(Branch.is_active == is_active)
+
+        if search:
+            search_term = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    Branch.branch_code.ilike(search_term),
+                    Branch.branch_name.ilike(search_term),
+                    Branch.branch_email.ilike(search_term),
+                    Branch.branch_phone.ilike(search_term),
+                )
+            )
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = await self.db.scalar(count_stmt)
+
+        allowed_sort_fields = {
+            "id": Branch.id,
+            "branch_code": Branch.branch_code,
+            "branch_name": Branch.branch_name,
+            "created_at": Branch.created_at,
+            "updated_at": Branch.updated_at,
+        }
+
+        sort_column = allowed_sort_fields.get(sort_by, Branch.id)
+        stmt = stmt.order_by(desc(sort_column) if sort_order == "desc" else asc(sort_column))
+
+        offset = (page - 1) * page_size
+        stmt = stmt.offset(offset).limit(page_size)
+
+        result = await self.db.execute(stmt)
+        return total or 0, list(result.scalars().all())
+
+    async def get_by_id_any_status(self, branch_id: int) -> Branch | None:
+        result = await self.db.execute(select(Branch).where(Branch.id == branch_id))
+        return result.scalar_one_or_none()
+
+    async def get_by_code(self, branch_code: str) -> Branch | None:
+        result = await self.db.execute(
+            select(Branch).where(Branch.branch_code == branch_code)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_name_and_company(
+        self,
+        branch_name: str,
+        company_id: int,
+    ) -> Branch | None:
+        result = await self.db.execute(
+            select(Branch).where(
+                Branch.branch_name == branch_name,
+                Branch.company_id == company_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_email(self, branch_email: str) -> Branch | None:
+        result = await self.db.execute(
+            select(Branch).where(Branch.branch_email == branch_email)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_phone(self, branch_phone: str) -> Branch | None:
+        result = await self.db.execute(
+            select(Branch).where(Branch.branch_phone == branch_phone)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_last_branch(self) -> Branch | None:
+        result = await self.db.execute(
+            select(Branch).order_by(Branch.id.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_company_by_id(self, company_id: int) -> Company | None:
+        result = await self.db.execute(
+            select(Company).where(
+                Company.id == company_id,
+                Company.is_active == True,  # noqa: E712
+            )
+        )
+        return result.scalar_one_or_none()
+
+
+    async def create(
+        self,
+        payload: BranchCreate,
+        branch_code: str,
+        created_by: str,
+    ) -> Branch:
+        data = payload.model_dump(exclude_none=True)
+        
+        data.pop("is_active", None)
+        data["branch_code"] = branch_code
+
+        branch = Branch(
+            **data,
+            is_active=True,
+            created_by=created_by,
+            updated_by=created_by,
+        )
+
+        self.db.add(branch)
+        await self.db.commit()
+        await self.db.refresh(branch)
+        return branch
+
+
+
+    async def update(
+        self,
+        branch: Branch,
+        payload: BranchUpdate,
+        updated_by: str,
+    ) -> Branch:
+        update_data = payload.model_dump(exclude_unset=True)
+
+        for field, value in update_data.items():
+            setattr(branch, field, value)
+
+        branch.updated_by = updated_by
+
+        await self.db.commit()
+        await self.db.refresh(branch)
+        return branch
+
+    async def set_active_status(
+        self,
+        branch: Branch,
+        is_active: bool,
+        updated_by: str,
+    ) -> Branch:
+        branch.is_active = is_active
+        branch.updated_by = updated_by
+
+        await self.db.commit()
+        await self.db.refresh(branch)
+        return branch
+
+    async def permanent_delete(self, branch: Branch) -> None:
+        await self.db.delete(branch)
+        await self.db.commit()
+
+    async def has_child_records(self, branch_id: int) -> bool:
+        # Department/Employee/Audit module তৈরি হলে এখানে child check add হবে।
+        return False
+
+    async def get_user_full_name_by_user_id(self, user_id: str | None) -> str | None:
+        if not user_id:
+            return None
+
+        result = await self.db.execute(
+            select(User.full_name).where(User.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
