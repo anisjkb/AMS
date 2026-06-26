@@ -7,24 +7,29 @@ export type Designation = {
   branch_id: number;
   department_id: number;
 
+  designation_name: string;
+  designation_code: string | null;
+
+  /**
+   * Used by existing frontend DesignationForm.
+   * Backend may not return this yet, so keep it nullable/optional-safe.
+   */
+  designation_short_name?: string | null;
+
+  remarks: string | null;
+  is_active: boolean;
+
   company_name?: string | null;
   branch_name?: string | null;
   department_name?: string | null;
 
-  designation_code: string;
-  designation_name: string;
-  designation_short_name?: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_by_name: string | null;
+  updated_by_name: string | null;
 
-  remarks?: string | null;
-  is_active: boolean;
-
-  created_by?: string | null;
-  updated_by?: string | null;
-  created_by_name?: string | null;
-  updated_by_name?: string | null;
-
-  created_at?: string;
-  updated_at?: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type DesignationCreatePayload = {
@@ -32,13 +37,26 @@ export type DesignationCreatePayload = {
   branch_id: number;
   department_id: number;
 
-  designation_code: string;
   designation_name: string;
-  designation_short_name?: string;
+  designation_code?: string | null;
+  designation_short_name?: string | null;
 
-  remarks?: string;
+  remarks?: string | null;
 };
 
-export type DesignationUpdatePayload = Partial<DesignationCreatePayload> & {
-  is_active?: boolean;
+export type DesignationUpdatePayload = Partial<DesignationCreatePayload>;
+
+export type DesignationPayload = DesignationCreatePayload;
+
+export type DesignationListResponse = {
+  items: Designation[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};
+
+export type DesignationMessageResponse = {
+  message: string;
+  data: Designation | null;
 };

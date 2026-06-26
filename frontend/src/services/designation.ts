@@ -3,173 +3,251 @@
 import type {
   Designation,
   DesignationCreatePayload,
+  DesignationListResponse,
+  DesignationMessageResponse,
+  DesignationUpdatePayload,
 } from "@/types/designation";
+import type { PaginationParams, StatusFilter } from "@/types/pagination";
 
-type DesignationListResponse =
-  | Designation[]
-  | {
-      data?: Designation[];
-      items?: Designation[];
-      results?: Designation[];
-      designations?: Designation[];
-    };
-
-type ApiErrorItem = {
+type ApiValidationError = {
   msg?: string;
-  loc?: Array<string | number>;
-  type?: string;
-};
-
-type ApiErrorResponse = {
-  detail?: string | ApiErrorItem[] | Record<string, unknown>;
   message?: string;
 };
 
-const normalizeDesignations = (
-  response: DesignationListResponse
-): Designation[] => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.results)) return response.results;
-  if (Array.isArray(response.designations)) return response.designations;
-
-  return [];
+type RawDesignationListResponse = {
+  items: Designation[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages?: number;
 };
 
-const getApiErrorMessage = async (
-  response: Response,
-  fallbackMessage: string
-): Promise<string> => {
-  const error = (await response.json().catch(() => ({}))) as ApiErrorResponse;
+export type DesignationListParams = PaginationParams & {
+  status?: StatusFilter;
+  companyId?: number | null;
+  branchId?: number | null;
+  departmentId?: number | null;
+};
 
-  if (typeof error.message === "string") return error.message;
-  if (typeof error.detail === "string") return error.detail;
+export type DesignationPayload = DesignationCreatePayload;
 
-  if (Array.isArray(error.detail)) {
-    return error.detail
-      .map((item) => {
-        const field = item.loc?.[item.loc.length - 1];
-        const message = item.msg || fallbackMessage;
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 100;
 
-        return field ? `${String(field)}: ${message}` : message;
-      })
-      .join(", ");
+const getErrorMessage = async (response: Response) => {
+  try {
+    const data: {
+      detail?: string | ApiValidationError[];
+      message?: string;
+    } = await response.json();
+
+    if (typeof data.detail === "string") {
+      return data.detail;
+    }
+
+    if (Array.isArray(data.detail)) {
+      return data.detail
+        .map((item: ApiValidationError) => {
+          return item.msg || item.message || "Validation error";
+        })
+        .join(", ");
+    }
+
+    if (typeof data.message === "string") {
+      return data.message;
+    }
+
+    return "Request failed. Please try again.";
+  } catch {
+    return "Request failed. Please try again.";
   }
-
-  return fallbackMessage;
 };
 
-export const getDesignations = async (): Promise<Designation[]> => {
-  const response = await fetch("/api/designations?page_size=100", {
-    method: "GET",
+const requestJson = async <T>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> => {
+  const response = await fetch(url, {
+    ...options,
     cache: "no-store",
-    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
   });
 
   if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to load designations")
-    );
+    throw new Error(await getErrorMessage(response));
   }
 
-  const data = (await response.json()) as DesignationListResponse;
-  return normalizeDesignations(data);
+  return response.json();
+};
+
+const normalizeDesignationListResponse = (
+  response: RawDesignationListResponse
+): DesignationListResponse => {
+  const totalPages =
+    response.total_pages ??
+    (response.total > 0 ? Math.ceil(response.total / response.page_size) : 0);
+
+  return {
+    ...response,
+    total_pages: totalPages,
+  };
+};
+
+const buildDesignationSearchParams = (params: DesignationListParams = {}) => {
+  const page = params.page ?? DEFAULT_PAGE;
+  const pageSize = Math.min(
+    params.pageSize ?? DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE
+  );
+
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    sort_by: params.sortBy ?? "id",
+    sort_order: params.sortOrder ?? "asc",
+  });
+
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+
+  if (params.status === "active") {
+    searchParams.set("is_active", "true");
+  }
+
+  if (params.status === "inactive") {
+    searchParams.set("is_active", "false");
+  }
+
+  if (params.companyId) {
+    searchParams.set("company_id", String(params.companyId));
+  }
+
+  if (params.branchId) {
+    searchParams.set("branch_id", String(params.branchId));
+  }
+
+  if (params.departmentId) {
+    searchParams.set("department_id", String(params.departmentId));
+  }
+
+  return searchParams;
+};
+
+export const getDesignationsPage = async (
+  params: DesignationListParams = {}
+): Promise<DesignationListResponse> => {
+  const searchParams = buildDesignationSearchParams(params);
+
+  const response = await requestJson<RawDesignationListResponse>(
+    `/api/backend/designations?${searchParams.toString()}`
+  );
+
+  return normalizeDesignationListResponse(response);
+};
+
+export const getAllDesignations = async (
+  params: DesignationListParams = {}
+): Promise<DesignationListResponse> => {
+  const firstPage = await getDesignationsPage({
+    ...params,
+    page: 1,
+    pageSize: MAX_PAGE_SIZE,
+  });
+
+  if (firstPage.total_pages <= 1) {
+    return {
+      ...firstPage,
+      page: 1,
+      page_size: firstPage.items.length,
+      total_pages: 1,
+    };
+  }
+
+  const allItems: Designation[] = [...firstPage.items];
+
+  for (let page = 2; page <= firstPage.total_pages; page += 1) {
+    const nextPage = await getDesignationsPage({
+      ...params,
+      page,
+      pageSize: MAX_PAGE_SIZE,
+    });
+
+    allItems.push(...nextPage.items);
+  }
+
+  return {
+    items: allItems,
+    total: firstPage.total,
+    page: 1,
+    page_size: allItems.length,
+    total_pages: 1,
+  };
+};
+
+// Keep this lookup-friendly for Employee forms/dropdowns.
+export const getDesignations = async (
+  params: DesignationListParams = {}
+): Promise<Designation[]> => {
+  const response = await getAllDesignations(params);
+  return response.items;
 };
 
 export const createDesignation = async (
   payload: DesignationCreatePayload
-): Promise<Designation> => {
-  const response = await fetch("/api/designations", {
+): Promise<DesignationMessageResponse> => {
+  return requestJson<DesignationMessageResponse>("/api/backend/designations", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to create designation")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
 };
 
 export const updateDesignation = async (
-  id: number,
-  payload: DesignationCreatePayload
-): Promise<Designation> => {
-  const response = await fetch(`/api/designations/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to update designation")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
+  designationId: number,
+  payload: DesignationUpdatePayload
+): Promise<DesignationMessageResponse> => {
+  return requestJson<DesignationMessageResponse>(
+    `/api/backend/designations/${designationId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
 };
 
 export const deactivateDesignation = async (
-  id: number
-): Promise<Designation> => {
-  const response = await fetch(`/api/designations/${id}/inactive`, {
-    method: "PATCH",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to mark designation inactive")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
+  designationId: number
+): Promise<DesignationMessageResponse> => {
+  return requestJson<DesignationMessageResponse>(
+    `/api/backend/designations/${designationId}`,
+    {
+      method: "DELETE",
+    }
+  );
 };
 
-export const restoreDesignation = async (id: number): Promise<Designation> => {
-  const response = await fetch(`/api/designations/${id}/restore`, {
-    method: "PATCH",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to restore designation")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
+export const restoreDesignation = async (
+  designationId: number
+): Promise<DesignationMessageResponse> => {
+  return requestJson<DesignationMessageResponse>(
+    `/api/backend/designations/${designationId}/restore`,
+    {
+      method: "PATCH",
+    }
+  );
 };
 
 export const permanentlyDeleteDesignation = async (
-  id: number
-): Promise<void> => {
-  const response = await fetch(`/api/designations/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  });
-
-  if (!response.ok && response.status !== 204) {
-    throw new Error(
-      await getApiErrorMessage(
-        response,
-        "Failed to permanently delete designation"
-      )
-    );
-  }
+  designationId: number
+): Promise<DesignationMessageResponse> => {
+  return requestJson<DesignationMessageResponse>(
+    `/api/backend/designations/${designationId}/permanent`,
+    {
+      method: "DELETE",
+    }
+  );
 };

@@ -1,18 +1,24 @@
+// E:\Audit\AMS\frontend\src\proxy.ts
+
 import { NextRequest, NextResponse } from "next/server";
+
+const publicRoutes = ["/login"];
 
 export function proxy(request: NextRequest) {
   const token = request.cookies.get("access_token")?.value;
   const { pathname } = request.nextUrl;
 
-  if (pathname === "/login" && token) {
+  const isPublicRoute = publicRoutes.includes(pathname);
+
+  if (token && pathname === "/login") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (pathname === "/" && token) {
+  if (token && pathname === "/") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (!token && pathname !== "/login") {
+  if (!token && !isPublicRoute) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

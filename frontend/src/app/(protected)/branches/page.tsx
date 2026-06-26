@@ -1,9 +1,13 @@
+// E:\Audit\AMS\frontend\src\app\(protected)\branches\page.tsx
+
 "use client";
 
-import { useEffect, useState } from "react";
-import { Filter, GitBranch, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { GitBranch } from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
+import DataTablePagination from "@/components/common/DataTablePagination";
+import DataTableToolbar from "@/components/common/DataTableToolbar";
 import ModuleHero from "@/components/common/ModuleHero";
 import PageActionBar from "@/components/common/PageActionBar";
 import RightDrawer from "@/components/common/RightDrawer";
@@ -12,24 +16,31 @@ import BranchRowActions from "@/components/branches/BranchRowActions";
 
 import {
   deactivateBranch,
-  getBranches,
+  getAllBranches,
+  getBranchesPage,
   permanentlyDeleteBranch,
   restoreBranch,
 } from "@/services/branch";
 import type { Branch } from "@/types/branch";
+import type { PageSizeOption, StatusFilter } from "@/types/pagination";
 
 type ConfirmAction = "inactive" | "restore" | "permanent_delete";
 type ConfirmVariant = "danger" | "warning" | "success";
-type StatusFilter = "all" | "active" | "inactive";
 
 function BranchesContent() {
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
 
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
@@ -38,79 +49,136 @@ function BranchesContent() {
   );
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  const loadBranches = async () => {
-    try {
-      setLoading(true);
-      const data = await getBranches();
-      setBranches(data);
-    } catch (error) {
-      console.error("Failed to load branches:", error);
-      setBranches([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getBranches()
-      .then((data) => {
-        if (!cancelled) {
-          setBranches(data);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error("Failed to load branches:", error);
-          setBranches([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const filteredBranches = branches.filter((branch) => {
-    const keyword = searchTerm.toLowerCase();
-
-    const matchesSearch =
-      branch.branch_name?.toLowerCase().includes(keyword) ||
-      branch.branch_code?.toLowerCase().includes(keyword) ||
-      branch.branch_email?.toLowerCase().includes(keyword) ||
-      branch.branch_phone?.toLowerCase().includes(keyword) ||
-      branch.company_name?.toLowerCase().includes(keyword);
-
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active" && branch.is_active) ||
-      (statusFilter === "inactive" && !branch.is_active);
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const showSuccess = (message: string) => {
+  const showSuccess = useCallback((message: string) => {
     setSuccessMessage(message);
     setErrorMessage("");
 
     setTimeout(() => {
       setSuccessMessage("");
     }, 3000);
-  };
+  }, []);
 
-  const showError = (message: string) => {
+  const showError = useCallback((message: string) => {
     setErrorMessage(message);
     setSuccessMessage("");
 
     setTimeout(() => {
       setErrorMessage("");
     }, 4000);
+  }, []);
+
+  const loadBranches = useCallback(
+    async (showPageLoading = false) => {
+      try {
+        if (showPageLoading) {
+          setLoading(true);
+        }
+
+        const response =
+          pageSize === "all"
+            ? await getAllBranches({
+                search: searchTerm,
+                status: statusFilter,
+                sortBy: "id",
+                sortOrder: "asc",
+              })
+            : await getBranchesPage({
+                page,
+                pageSize,
+                search: searchTerm,
+                status: statusFilter,
+                sortBy: "id",
+                sortOrder: "asc",
+              });
+
+        setBranches(response.items);
+        setTotalRecords(response.total);
+        setTotalPages(response.total_pages);
+      } catch (error) {
+        console.error("Failed to load branches:", error);
+        setBranches([]);
+        setTotalRecords(0);
+        setTotalPages(0);
+        showError(
+          error instanceof Error ? error.message : "Failed to load branches."
+        );
+      } finally {
+        if (showPageLoading) {
+          setLoading(false);
+        }
+      }
+    },
+    [page, pageSize, searchTerm, statusFilter, showError]
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const request =
+      pageSize === "all"
+        ? getAllBranches({
+            search: searchTerm,
+            status: statusFilter,
+            sortBy: "id",
+            sortOrder: "asc",
+          })
+        : getBranchesPage({
+            page,
+            pageSize,
+            search: searchTerm,
+            status: statusFilter,
+            sortBy: "id",
+            sortOrder: "asc",
+          });
+
+    void request
+      .then((response) => {
+        if (!isMounted) return;
+
+        setBranches(response.items);
+        setTotalRecords(response.total);
+        setTotalPages(response.total_pages);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+
+        console.error("Failed to load branches:", error);
+        setBranches([]);
+        setTotalRecords(0);
+        setTotalPages(0);
+        showError(
+          error instanceof Error ? error.message : "Failed to load branches."
+        );
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [page, pageSize, searchTerm, statusFilter, showError]);
+
+  const handlePageSizeChange = (nextPageSize: PageSizeOption) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+  };
+
+  const handleSearchChange = (nextSearchTerm: string) => {
+    setSearchTerm(nextSearchTerm);
+    setPage(1);
+  };
+
+  const handleStatusChange = (nextStatus: StatusFilter) => {
+    setStatusFilter(nextStatus);
+    setPage(1);
+  };
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+
+    setPage(nextPage);
   };
 
   const handleCreate = () => {
@@ -143,12 +211,10 @@ function BranchesContent() {
     setEditingBranch(null);
 
     showSuccess(
-      wasEditing
-        ? "Branch updated successfully."
-        : "Branch created successfully."
+      wasEditing ? "Branch updated successfully." : "Branch created successfully."
     );
 
-    loadBranches();
+    void loadBranches(false);
   };
 
   const openConfirm = (branch: Branch, action: ConfirmAction) => {
@@ -188,7 +254,7 @@ function BranchesContent() {
 
       setSelectedBranch(null);
       setConfirmAction(null);
-      loadBranches();
+      await loadBranches(false);
     } catch (error) {
       console.error("Branch action failed:", error);
       showError(
@@ -204,9 +270,7 @@ function BranchesContent() {
   const getConfirmTitle = () => {
     if (confirmAction === "inactive") return "Mark Branch as Inactive?";
     if (confirmAction === "restore") return "Restore Branch?";
-    if (confirmAction === "permanent_delete") {
-      return "Permanently Delete Branch?";
-    }
+    if (confirmAction === "permanent_delete") return "Permanently Delete Branch?";
 
     return "";
   };
@@ -274,41 +338,22 @@ function BranchesContent() {
         )}
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
-            <div>
-              <h2 className="text-xl font-black text-slate-900">Branches</h2>
-              <p className="text-sm text-slate-500">
-                Branch list connected with backend CRUD API.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 md:flex-row">
-              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <Search size={17} className="text-slate-400" />
-                <input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search branch..."
-                  className="ml-2 bg-transparent text-sm outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-                <Filter size={17} className="text-slate-500" />
-                <select
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as StatusFilter)
-                  }
-                  className="bg-transparent text-sm font-bold text-slate-700 outline-none"
-                >
-                  <option value="all">All Status</option>
-                  <option value="active">Active Only</option>
-                  <option value="inactive">Inactive Only</option>
-                </select>
-              </div>
-            </div>
+          <div className="mb-5">
+            <h2 className="text-xl font-black text-slate-900">Branches</h2>
+            <p className="text-sm text-slate-500">
+              Branch list connected with backend CRUD API.
+            </p>
           </div>
+
+          <DataTableToolbar
+            pageSize={pageSize}
+            searchTerm={searchTerm}
+            statusFilter={statusFilter}
+            searchPlaceholder="Search branch."
+            onPageSizeChange={handlePageSizeChange}
+            onSearchChange={handleSearchChange}
+            onStatusChange={handleStatusChange}
+          />
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="min-w-275 w-full text-left text-sm">
@@ -336,7 +381,7 @@ function BranchesContent() {
                       Loading branches...
                     </td>
                   </tr>
-                ) : filteredBranches.length === 0 ? (
+                ) : branches.length === 0 ? (
                   <tr>
                     <td
                       colSpan={9}
@@ -346,7 +391,7 @@ function BranchesContent() {
                     </td>
                   </tr>
                 ) : (
-                  filteredBranches.map((branch, index) => (
+                  branches.map((branch, index) => (
                     <tr
                       key={branch.id}
                       className={`border-t border-slate-100 hover:bg-slate-50 ${
@@ -354,7 +399,9 @@ function BranchesContent() {
                       }`}
                     >
                       <td className="px-5 py-4 font-semibold text-slate-600">
-                        {index + 1}
+                        {pageSize === "all"
+                          ? index + 1
+                          : (page - 1) * pageSize + index + 1}
                       </td>
 
                       <td className="px-5 py-4 font-semibold text-slate-700">
@@ -366,7 +413,7 @@ function BranchesContent() {
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
-                        {branch.branch_code}
+                        {branch.branch_code || "-"}
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
@@ -416,6 +463,14 @@ function BranchesContent() {
               </tbody>
             </table>
           </div>
+
+          <DataTablePagination
+            page={page}
+            pageSize={pageSize}
+            total={totalRecords}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
         </section>
       </div>
 

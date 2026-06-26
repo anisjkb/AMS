@@ -1,172 +1,252 @@
-import type { Branch, BranchCreatePayload } from "@/types/branch";
+// E:\Audit\AMS\frontend\src\services\branch.ts
 
-type BranchListResponse =
-  | Branch[]
-  | {
-      data?: Branch[];
-      items?: Branch[];
-      results?: Branch[];
-      branches?: Branch[];
-    };
+import type { Branch } from "@/types/branch";
+import type { PaginationParams, StatusFilter } from "@/types/pagination";
 
-type ApiErrorItem = {
+type ApiValidationError = {
   msg?: string;
-  loc?: Array<string | number>;
-  type?: string;
-};
-
-type ApiErrorResponse = {
-  detail?: string | ApiErrorItem[] | Record<string, unknown>;
   message?: string;
 };
 
-const normalizeBranches = (response: BranchListResponse): Branch[] => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.results)) return response.results;
-  if (Array.isArray(response.branches)) return response.branches;
-
-  return [];
+export type BranchListResponse = {
+  items: Branch[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 };
 
-const getApiErrorMessage = async (
-  response: Response,
-  fallbackMessage: string
-): Promise<string> => {
-  const error = (await response.json().catch(() => ({}))) as ApiErrorResponse;
-
-  if (typeof error.message === "string") {
-    return error.message;
-  }
-
-  if (typeof error.detail === "string") {
-    return error.detail;
-  }
-
-  if (Array.isArray(error.detail)) {
-    return error.detail
-      .map((item) => {
-        const field = item.loc?.[item.loc.length - 1];
-        const message = item.msg || fallbackMessage;
-
-        return field ? `${String(field)}: ${message}` : message;
-      })
-      .join(", ");
-  }
-
-  return fallbackMessage;
+type RawBranchListResponse = {
+  items: Branch[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages?: number;
 };
 
-export const getBranches = async (): Promise<Branch[]> => {
-  const response = await fetch("/api/branches?page_size=100", {
-    method: "GET",
+type BranchPayload = {
+  branch_name: string;
+  branch_code?: string | null;
+  company_id: number;
+  branch_email?: string | null;
+  branch_phone?: string | null;
+  branch_address?: string | null;
+  remarks?: string | null;
+};
+
+type BranchMessageResponse = {
+  message: string;
+  data: Branch | null;
+};
+
+type BranchListParams = PaginationParams & {
+  status?: StatusFilter;
+  companyId?: number | null;
+};
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 100;
+
+const getErrorMessage = async (response: Response) => {
+  try {
+    const data: {
+      detail?: string | ApiValidationError[];
+      message?: string;
+    } = await response.json();
+
+    if (typeof data.detail === "string") {
+      return data.detail;
+    }
+
+    if (Array.isArray(data.detail)) {
+      return data.detail
+        .map((item: ApiValidationError) => {
+          return item.msg || item.message || "Validation error";
+        })
+        .join(", ");
+    }
+
+    if (typeof data.message === "string") {
+      return data.message;
+    }
+
+    return "Request failed. Please try again.";
+  } catch {
+    return "Request failed. Please try again.";
+  }
+};
+
+const requestJson = async <T>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> => {
+  const response = await fetch(url, {
+    ...options,
     cache: "no-store",
-    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
   });
 
   if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to load branches")
-    );
+    throw new Error(await getErrorMessage(response));
   }
 
-  const data = (await response.json()) as BranchListResponse;
-  return normalizeBranches(data);
+  return response.json();
+};
+
+const normalizeBranchListResponse = (
+  response: RawBranchListResponse
+): BranchListResponse => {
+  const totalPages =
+    response.total_pages ??
+    (response.total > 0 ? Math.ceil(response.total / response.page_size) : 0);
+
+  return {
+    ...response,
+    total_pages: totalPages,
+  };
+};
+
+const buildBranchSearchParams = (params: BranchListParams = {}) => {
+  const page = params.page ?? DEFAULT_PAGE;
+  const pageSize = Math.min(
+    params.pageSize ?? DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE
+  );
+
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    sort_by: params.sortBy ?? "id",
+    sort_order: params.sortOrder ?? "asc",
+  });
+
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+
+  if (params.status === "active") {
+    searchParams.set("is_active", "true");
+  }
+
+  if (params.status === "inactive") {
+    searchParams.set("is_active", "false");
+  }
+
+  if (params.companyId) {
+    searchParams.set("company_id", String(params.companyId));
+  }
+
+  return searchParams;
+};
+
+export const getBranchesPage = async (
+  params: BranchListParams = {}
+): Promise<BranchListResponse> => {
+  const searchParams = buildBranchSearchParams(params);
+
+  const response = await requestJson<RawBranchListResponse>(
+    `/api/backend/branches?${searchParams.toString()}`
+  );
+
+  return normalizeBranchListResponse(response);
+};
+
+export const getAllBranches = async (
+  params: BranchListParams = {}
+): Promise<BranchListResponse> => {
+  const firstPage = await getBranchesPage({
+    ...params,
+    page: 1,
+    pageSize: MAX_PAGE_SIZE,
+  });
+
+  if (firstPage.total_pages <= 1) {
+    return {
+      ...firstPage,
+      page: 1,
+      page_size: firstPage.items.length,
+      total_pages: 1,
+    };
+  }
+
+  const allItems: Branch[] = [...firstPage.items];
+
+  for (let page = 2; page <= firstPage.total_pages; page += 1) {
+    const nextPage = await getBranchesPage({
+      ...params,
+      page,
+      pageSize: MAX_PAGE_SIZE,
+    });
+
+    allItems.push(...nextPage.items);
+  }
+
+  return {
+    items: allItems,
+    total: firstPage.total,
+    page: 1,
+    page_size: allItems.length,
+    total_pages: 1,
+  };
+};
+
+// Keep this lookup-friendly for forms/dropdowns.
+export const getBranches = async (
+  params: BranchListParams = {}
+): Promise<Branch[]> => {
+  const response = await getAllBranches(params);
+  return response.items;
 };
 
 export const createBranch = async (
-  payload: BranchCreatePayload
-): Promise<Branch> => {
-  const response = await fetch("/api/branches", {
+  payload: BranchPayload
+): Promise<BranchMessageResponse> => {
+  return requestJson<BranchMessageResponse>("/api/backend/branches", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to create branch")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
 };
 
 export const updateBranch = async (
-  id: number,
-  payload: BranchCreatePayload
-): Promise<Branch> => {
-  const response = await fetch(`/api/branches/${id}`, {
+  branchId: number,
+  payload: BranchPayload
+): Promise<BranchMessageResponse> => {
+  return requestJson<BranchMessageResponse>(`/api/backend/branches/${branchId}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to update branch")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
 };
 
-export const deactivateBranch = async (id: number): Promise<Branch> => {
-  const response = await fetch(`/api/branches/${id}/inactive`, {
-    method: "PATCH",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to mark branch inactive")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
-};
-
-export const restoreBranch = async (id: number): Promise<Branch> => {
-  const response = await fetch(`/api/branches/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify({
-      is_active: true,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to restore branch")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
-};
-
-export const permanentlyDeleteBranch = async (id: number): Promise<void> => {
-  const response = await fetch(`/api/branches/${id}`, {
+export const deactivateBranch = async (
+  branchId: number
+): Promise<BranchMessageResponse> => {
+  return requestJson<BranchMessageResponse>(`/api/backend/branches/${branchId}`, {
     method: "DELETE",
-    credentials: "include",
   });
+};
 
-  if (!response.ok && response.status !== 204) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to permanently delete branch")
-    );
-  }
+export const restoreBranch = async (
+  branchId: number
+): Promise<BranchMessageResponse> => {
+  return requestJson<BranchMessageResponse>(
+    `/api/backend/branches/${branchId}/restore`,
+    {
+      method: "PATCH",
+    }
+  );
+};
+
+export const permanentlyDeleteBranch = async (
+  branchId: number
+): Promise<BranchMessageResponse> => {
+  return requestJson<BranchMessageResponse>(
+    `/api/backend/branches/${branchId}/permanent`,
+    {
+      method: "DELETE",
+    }
+  );
 };

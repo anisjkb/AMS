@@ -1,40 +1,159 @@
+"use client";
+
+import { createElement } from "react";
+
+import type { LucideIcon } from "lucide-react";
 import {
-  BadgeCheck,
-  BadgeX,
+  AlertTriangle,
+  BarChart3,
+  BookOpenCheck,
+  Boxes,
+  Building,
   Building2,
-  ChevronDown,
+  CalendarDays,
+  ChartNoAxesCombined,
+  CheckSquare,
+  ChevronRight,
   Circle,
+  ClipboardCheck,
+  Contact,
+  Database,
   Download,
+  Factory,
+  FileBadge,
+  FileCheck2,
+  FileCog,
+  FileSpreadsheet,
+  FileText,
+  FolderTree,
   GitBranch,
+  Home,
+  Landmark,
   LayoutDashboard,
+  ListChecks,
+  LockKeyhole,
+  MapPin,
+  Menu,
   Network,
-  Pencil,
   Plus,
   RotateCcw,
+  Settings,
+  Shield,
+  ShieldCheck,
   Trash2,
   Upload,
+  UserCheck,
+  UserCog,
   Users,
-  type LucideIcon,
+  UsersRound,
 } from "lucide-react";
 
-const iconMap: Record<string, LucideIcon> = {
-  LayoutDashboard,
+export const iconMap = {
+  AlertTriangle,
+  BarChart3,
+  BookOpenCheck,
+  Boxes,
+  Building,
   Building2,
-  GitBranch,
-  Network,
-  BadgeCheck,
-  Users,
-  Plus,
-  Pencil,
-  Trash2,
-  RotateCcw,
-  BadgeX,
+  CalendarDays,
+  ChartNoAxesCombined,
+  CheckSquare,
+  ChevronRight,
+  Circle,
+  ClipboardCheck,
+  Contact,
+  Database,
   Download,
+  Factory,
+  FileBadge,
+  FileCheck2,
+  FileCog,
+  FileSpreadsheet,
+  FileText,
+  FolderTree,
+  GitBranch,
+  Home,
+  Landmark,
+  LayoutDashboard,
+  ListChecks,
+  LockKeyhole,
+  MapPin,
+  Menu,
+  Network,
+  Plus,
+  RotateCcw,
+  Settings,
+  Shield,
+  ShieldCheck,
+  Trash2,
   Upload,
-  ChevronDown,
-};
+  UserCheck,
+  UserCog,
+  Users,
+  UsersRound,
+
+  // Backward compatible aliases from DB seed / older menu data
+  Dashboard: LayoutDashboard,
+  Organization: Building2,
+  Security: ShieldCheck,
+  Audit: ClipboardCheck,
+  Company: Building2,
+  Branch: GitBranch,
+  Department: FolderTree,
+  Designation: UserCheck,
+  Employee: Users,
+  Permission: LockKeyhole,
+  Role: Shield,
+  User: UserCog,
+  MenuPermission: ListChecks,
+  MenuActionPermission: CheckSquare,
+  AuditSubject: BookOpenCheck,
+  AuditEntity: Building,
+  BusinessActivity: Network,
+  ExchangeListing: Landmark,
+  EntityAddress: MapPin,
+  EntityContact: Contact,
+  EntityDirector: UsersRound,
+  EntityLicense: FileBadge,
+  EntityFacility: Factory,
+  FinancialSnapshot: ChartNoAxesCombined,
+} satisfies Record<string, LucideIcon>;
+
+export type IconName = keyof typeof iconMap;
+
+export function getIconComponent(iconName?: string | null): LucideIcon {
+  if (!iconName) return Circle;
+
+  return iconMap[iconName as IconName] ?? Circle;
+}
+
+export function getMenuIcon(iconName?: string | null): LucideIcon {
+  return getIconComponent(iconName);
+}
+
+export function getLucideIcon(iconName?: string | null): LucideIcon {
+  return getIconComponent(iconName);
+}
+
 
 export function getIcon(iconName?: string | null): LucideIcon {
-  if (!iconName) return Circle;
-  return iconMap[iconName] ?? Circle;
+  return getIconComponent(iconName);
 }
+
+export function IconMapper({
+  name,
+  iconName,
+  className,
+  strokeWidth,
+}: {
+  name?: string | null;
+  iconName?: string | null;
+  className?: string;
+  strokeWidth?: number;
+}) {
+  return createElement(getIconComponent(name ?? iconName), { className, strokeWidth });
+}
+
+export default IconMapper;
+
+

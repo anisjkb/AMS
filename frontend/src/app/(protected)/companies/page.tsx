@@ -1,35 +1,58 @@
+// E:\Audit\AMS\frontend\src\app\(protected)\companies\page.tsx
+
 "use client";
 
-import { useEffect, useState } from "react";
-import { Building2, Filter, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Building2 } from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
+import DataTablePagination from "@/components/common/DataTablePagination";
+import DataTableToolbar from "@/components/common/DataTableToolbar";
 import ModuleHero from "@/components/common/ModuleHero";
 import PageActionBar from "@/components/common/PageActionBar";
 import RightDrawer from "@/components/common/RightDrawer";
 import CompanyForm from "@/components/companies/CompanyForm";
 import CompanyRowActions from "@/components/companies/CompanyRowActions";
+import { useModuleActions } from "@/hooks/useModuleActions";
 
 import {
   deactivateCompany,
-  getCompanies,
+  getAllCompanies,
+  getCompaniesPage,
   permanentlyDeleteCompany,
   restoreCompany,
 } from "@/services/company";
+
+import type { PageSizeOption, StatusFilter } from "@/types/pagination";
 import type { Company } from "@/types/company";
 
 type ConfirmAction = "inactive" | "restore" | "permanent_delete";
 type ConfirmVariant = "danger" | "warning" | "success";
-type StatusFilter = "all" | "active" | "inactive";
 
 function CompaniesContent() {
+  const companyActions = useModuleActions("company");
+
+  const showCompanyRowActions =
+    companyActions.canUpdate ||
+    companyActions.canDelete ||
+    companyActions.canRestore ||
+    companyActions.canPermanentDelete;
+
+  const tableColumnCount = showCompanyRowActions ? 8 : 7;
+
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
 
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -38,78 +61,137 @@ function CompaniesContent() {
   );
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  const loadCompanies = async () => {
-    try {
-      setLoading(true);
-      const data = await getCompanies();
-      setCompanies(data);
-    } catch (error) {
-      console.error("Failed to load companies:", error);
-      setCompanies([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getCompanies()
-      .then((data) => {
-        if (!cancelled) {
-          setCompanies(data);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error("Failed to load companies:", error);
-          setCompanies([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const filteredCompanies = companies.filter((company) => {
-    const keyword = searchTerm.toLowerCase();
-
-    const matchesSearch =
-      company.company_name?.toLowerCase().includes(keyword) ||
-      company.company_code?.toLowerCase().includes(keyword) ||
-      company.company_email?.toLowerCase().includes(keyword) ||
-      company.company_phone?.toLowerCase().includes(keyword);
-
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "active" && company.is_active) ||
-      (statusFilter === "inactive" && !company.is_active);
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const showSuccess = (message: string) => {
+  const showSuccess = useCallback((message: string) => {
     setSuccessMessage(message);
     setErrorMessage("");
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       setSuccessMessage("");
     }, 3000);
-  };
+  }, []);
 
-  const showError = (message: string) => {
+  const showError = useCallback((message: string) => {
     setErrorMessage(message);
     setSuccessMessage("");
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       setErrorMessage("");
     }, 4000);
+  }, []);
+
+  const loadCompanies = useCallback(
+    async (showPageLoading = false) => {
+      try {
+        if (showPageLoading) {
+          setLoading(true);
+        }
+
+        const response =
+          pageSize === "all"
+            ? await getAllCompanies({
+                search: searchTerm,
+                status: statusFilter,
+                sortBy: "id",
+                sortOrder: "asc",
+              })
+            : await getCompaniesPage({
+                page,
+                pageSize,
+                search: searchTerm,
+                status: statusFilter,
+                sortBy: "id",
+                sortOrder: "asc",
+              });
+
+        setCompanies(response.items);
+        setTotalRecords(response.total);
+        setTotalPages(response.total_pages);
+      } catch (error) {
+        console.error("Failed to load companies:", error);
+        setCompanies([]);
+        setTotalRecords(0);
+        setTotalPages(0);
+        showError(
+          error instanceof Error ? error.message : "Failed to load companies."
+        );
+      } finally {
+        if (showPageLoading) {
+          setLoading(false);
+        }
+      }
+    },
+    [page, pageSize, searchTerm, statusFilter, showError]
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const request =
+      pageSize === "all"
+        ? getAllCompanies({
+            search: searchTerm,
+            status: statusFilter,
+            sortBy: "id",
+            sortOrder: "asc",
+          })
+        : getCompaniesPage({
+            page,
+            pageSize,
+            search: searchTerm,
+            status: statusFilter,
+            sortBy: "id",
+            sortOrder: "asc",
+          });
+
+    void request
+      .then((response) => {
+        if (!isMounted) return;
+
+        setCompanies(response.items);
+        setTotalRecords(response.total);
+        setTotalPages(response.total_pages);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+
+        console.error("Failed to load companies:", error);
+        setCompanies([]);
+        setTotalRecords(0);
+        setTotalPages(0);
+        showError(
+          error instanceof Error ? error.message : "Failed to load companies."
+        );
+      })
+      .finally(() => {
+        if (!isMounted) return;
+
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [page, pageSize, searchTerm, statusFilter, showError]);
+
+  const handlePageSizeChange = (nextPageSize: PageSizeOption) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+  };
+
+  const handleSearchChange = (nextSearchTerm: string) => {
+    setSearchTerm(nextSearchTerm);
+    setPage(1);
+  };
+
+  const handleStatusChange = (nextStatus: StatusFilter) => {
+    setStatusFilter(nextStatus);
+    setPage(1);
+  };
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+
+    setPage(nextPage);
   };
 
   const handleCreate = () => {
@@ -147,7 +229,7 @@ function CompaniesContent() {
         : "Company created successfully."
     );
 
-    loadCompanies();
+    void loadCompanies(false);
   };
 
   const openConfirm = (company: Company, action: ConfirmAction) => {
@@ -187,7 +269,7 @@ function CompaniesContent() {
 
       setSelectedCompany(null);
       setConfirmAction(null);
-      loadCompanies();
+      await loadCompanies(false);
     } catch (error) {
       console.error("Company action failed:", error);
       showError(
@@ -202,7 +284,9 @@ function CompaniesContent() {
 
   const getConfirmTitle = () => {
     if (confirmAction === "inactive") return "Mark Company as Inactive?";
+
     if (confirmAction === "restore") return "Restore Company?";
+
     if (confirmAction === "permanent_delete") {
       return "Permanently Delete Company?";
     }
@@ -243,7 +327,6 @@ function CompaniesContent() {
     return "danger";
   };
 
-  
   return (
     <>
       <div className="space-y-6">
@@ -274,41 +357,22 @@ function CompaniesContent() {
         )}
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
-            <div>
-              <h2 className="text-xl font-black text-slate-900">Companies</h2>
-              <p className="text-sm text-slate-500">
-                Company list connected with backend CRUD API.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 md:flex-row">
-              <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <Search size={17} className="text-slate-400" />
-                <input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search company..."
-                  className="ml-2 bg-transparent text-sm outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-                <Filter size={17} className="text-slate-500" />
-                <select
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as StatusFilter)
-                  }
-                  className="bg-transparent text-sm font-bold text-slate-700 outline-none"
-                >
-                  <option value="all">All Status</option>
-                  <option value="active">Active Only</option>
-                  <option value="inactive">Inactive Only</option>
-                </select>
-              </div>
-            </div>
+          <div className="mb-5">
+            <h2 className="text-xl font-black text-slate-900">Companies</h2>
+            <p className="text-sm text-slate-500">
+              Company list connected with backend CRUD API.
+            </p>
           </div>
+
+          <DataTableToolbar
+            pageSize={pageSize}
+            searchTerm={searchTerm}
+            statusFilter={statusFilter}
+            searchPlaceholder="Search company."
+            onPageSizeChange={handlePageSizeChange}
+            onSearchChange={handleSearchChange}
+            onStatusChange={handleStatusChange}
+          />
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="min-w-275 w-full text-left text-sm">
@@ -321,7 +385,10 @@ function CompaniesContent() {
                   <th className="px-5 py-4 font-bold">Phone</th>
                   <th className="px-5 py-4 font-bold">Address</th>
                   <th className="px-5 py-4 font-bold">Status</th>
-                  <th className="px-5 py-4 text-right font-bold">Action</th>
+
+                  {showCompanyRowActions ? (
+                    <th className="px-5 py-4 text-right font-bold">Action</th>
+                  ) : null}
                 </tr>
               </thead>
 
@@ -329,23 +396,23 @@ function CompaniesContent() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={tableColumnCount}
                       className="px-5 py-16 text-center text-slate-400"
                     >
                       Loading companies...
                     </td>
                   </tr>
-                ) : filteredCompanies.length === 0 ? (
+                ) : companies.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={tableColumnCount}
                       className="px-5 py-16 text-center text-slate-400"
                     >
                       No company data found. Click Create to add first company.
                     </td>
                   </tr>
                 ) : (
-                  filteredCompanies.map((company, index) => (
+                  companies.map((company, index) => (
                     <tr
                       key={company.id}
                       className={`border-t border-slate-100 hover:bg-slate-50 ${
@@ -353,7 +420,9 @@ function CompaniesContent() {
                       }`}
                     >
                       <td className="px-5 py-4 font-semibold text-slate-600">
-                        {index + 1}
+                        {pageSize === "all"
+                          ? index + 1
+                          : (page - 1) * pageSize + index + 1}
                       </td>
 
                       <td className="px-5 py-4 font-bold text-slate-900">
@@ -361,7 +430,7 @@ function CompaniesContent() {
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
-                        {company.company_code}
+                        {company.company_code || "-"}
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
@@ -390,27 +459,37 @@ function CompaniesContent() {
                         </span>
                       </td>
 
-                      <td className="px-5 py-4 text-right">
-                        <CompanyRowActions
-                          company={company}
-                          onEdit={handleEdit}
-                          onInactive={(selected) =>
-                            openConfirm(selected, "inactive")
-                          }
-                          onRestore={(selected) =>
-                            openConfirm(selected, "restore")
-                          }
-                          onPermanentDelete={(selected) =>
-                            openConfirm(selected, "permanent_delete")
-                          }
-                        />
-                      </td>
+                      {showCompanyRowActions ? (
+                        <td className="px-5 py-4 text-right">
+                          <CompanyRowActions
+                            company={company}
+                            onEdit={handleEdit}
+                            onInactive={(selected) =>
+                              openConfirm(selected, "inactive")
+                            }
+                            onRestore={(selected) =>
+                              openConfirm(selected, "restore")
+                            }
+                            onPermanentDelete={(selected) =>
+                              openConfirm(selected, "permanent_delete")
+                            }
+                          />
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
+
+          <DataTablePagination
+            page={page}
+            pageSize={pageSize}
+            total={totalRecords}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
         </section>
       </div>
 
@@ -443,8 +522,6 @@ function CompaniesContent() {
       />
     </>
   );
-
-
 }
 
 export default function CompaniesPage() {

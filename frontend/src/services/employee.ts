@@ -1,209 +1,308 @@
-
 // E:\Audit\AMS\frontend\src\services\employee.ts
 
 import type {
   Employee,
   EmployeeCreatePayload,
+  EmployeeListResponse,
+  EmployeeMessageResponse,
   EmployeeUpdatePayload,
 } from "@/types/employee";
+import type { PaginationParams, StatusFilter } from "@/types/pagination";
 
-type EmployeeListResponse =
-  | Employee[]
-  | {
-      data?: Employee[];
-      items?: Employee[];
-      results?: Employee[];
-      employees?: Employee[];
-    };
-
-type ApiErrorItem = {
+type ApiValidationError = {
   msg?: string;
-  loc?: Array<string | number>;
-  type?: string;
-};
-
-type ApiErrorResponse = {
-  detail?: string | ApiErrorItem[] | Record<string, unknown>;
   message?: string;
 };
 
-const normalizeEmployees = (response: EmployeeListResponse): Employee[] => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.results)) return response.results;
-  if (Array.isArray(response.employees)) return response.employees;
-
-  return [];
+type RawEmployeeListResponse = {
+  items: Employee[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages?: number;
 };
 
-const getApiErrorMessage = async (
-  response: Response,
-  fallbackMessage: string
-): Promise<string> => {
-  const error = (await response.json().catch(() => ({}))) as ApiErrorResponse;
-
-  if (typeof error.message === "string") return error.message;
-  if (typeof error.detail === "string") return error.detail;
-
-  if (Array.isArray(error.detail)) {
-    return error.detail
-      .map((item) => {
-        const field = item.loc?.[item.loc.length - 1];
-        const message = item.msg || fallbackMessage;
-
-        return field ? `${String(field)}: ${message}` : message;
-      })
-      .join(", ");
-  }
-
-  return fallbackMessage;
+export type EmployeeListParams = PaginationParams & {
+  status?: StatusFilter;
+  companyId?: number | null;
+  branchId?: number | null;
+  departmentId?: number | null;
+  designationId?: number | null;
+  employeeStatus?: string | null;
 };
 
-export const getEmployeeMediaUrl = (url?: string | null): string => {
-  if (!url) return "";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+export type EmployeePayload = EmployeeCreatePayload;
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 100;
 
+const getErrorMessage = async (response: Response) => {
   try {
-    const origin = new URL(apiUrl).origin;
-    return `${origin}${url}`;
+    const data: {
+      detail?: string | ApiValidationError[];
+      message?: string;
+    } = await response.json();
+
+    if (typeof data.detail === "string") {
+      return data.detail;
+    }
+
+    if (Array.isArray(data.detail)) {
+      return data.detail
+        .map((item: ApiValidationError) => {
+          return item.msg || item.message || "Validation error";
+        })
+        .join(", ");
+    }
+
+    if (typeof data.message === "string") {
+      return data.message;
+    }
+
+    return "Request failed. Please try again.";
   } catch {
-    return url;
+    return "Request failed. Please try again.";
   }
 };
 
-export const getEmployees = async (): Promise<Employee[]> => {
-  const response = await fetch("/api/employees?page_size=100", {
-    method: "GET",
+const requestJson = async <T>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> => {
+  const response = await fetch(url, {
+    ...options,
     cache: "no-store",
-    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
   });
 
   if (!response.ok) {
-    throw new Error(await getApiErrorMessage(response, "Failed to load employees"));
+    throw new Error(await getErrorMessage(response));
   }
 
-  const data = (await response.json()) as EmployeeListResponse;
-  return normalizeEmployees(data);
+  return response.json();
+};
+
+const normalizeEmployeeListResponse = (
+  response: RawEmployeeListResponse
+): EmployeeListResponse => {
+  const totalPages =
+    response.total_pages ??
+    (response.total > 0 ? Math.ceil(response.total / response.page_size) : 0);
+
+  return {
+    ...response,
+    total_pages: totalPages,
+  };
+};
+
+const buildEmployeeSearchParams = (params: EmployeeListParams = {}) => {
+  const page = params.page ?? DEFAULT_PAGE;
+  const pageSize = Math.min(
+    params.pageSize ?? DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE
+  );
+
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    sort_by: params.sortBy ?? "id",
+    sort_order: params.sortOrder ?? "asc",
+  });
+
+  if (params.search?.trim()) {
+    searchParams.set("search", params.search.trim());
+  }
+
+  if (params.status === "active") {
+    searchParams.set("is_active", "true");
+  }
+
+  if (params.status === "inactive") {
+    searchParams.set("is_active", "false");
+  }
+
+  if (params.companyId) {
+    searchParams.set("company_id", String(params.companyId));
+  }
+
+  if (params.branchId) {
+    searchParams.set("branch_id", String(params.branchId));
+  }
+
+  if (params.departmentId) {
+    searchParams.set("department_id", String(params.departmentId));
+  }
+
+  if (params.designationId) {
+    searchParams.set("designation_id", String(params.designationId));
+  }
+
+  if (params.employeeStatus?.trim()) {
+    searchParams.set("employee_status", params.employeeStatus.trim());
+  }
+
+  return searchParams;
+};
+
+export const getEmployeeMediaUrl = (
+  mediaPath?: string | null
+): string | null => {
+  if (!mediaPath) {
+    return null;
+  }
+
+  if (mediaPath.startsWith("http://") || mediaPath.startsWith("https://")) {
+    return mediaPath;
+  }
+
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+
+  const backendBaseUrl = apiBaseUrl.replace(/\/api\/v1\/?$/, "");
+  const normalizedPath = mediaPath.startsWith("/")
+    ? mediaPath
+    : `/${mediaPath}`;
+
+  return `${backendBaseUrl}${normalizedPath}`;
+};
+
+export const getEmployees = async (
+  params: EmployeeListParams = {}
+): Promise<EmployeeListResponse> => {
+  const searchParams = buildEmployeeSearchParams(params);
+
+  const response = await requestJson<RawEmployeeListResponse>(
+    `/api/backend/employees?${searchParams.toString()}`
+  );
+
+  return normalizeEmployeeListResponse(response);
+};
+
+export const getAllEmployees = async (
+  params: EmployeeListParams = {}
+): Promise<EmployeeListResponse> => {
+  const firstPage = await getEmployees({
+    ...params,
+    page: 1,
+    pageSize: MAX_PAGE_SIZE,
+  });
+
+  if (firstPage.total_pages <= 1) {
+    return {
+      ...firstPage,
+      page: 1,
+      page_size: firstPage.items.length,
+      total_pages: 1,
+    };
+  }
+
+  const allItems: Employee[] = [...firstPage.items];
+
+  for (let page = 2; page <= firstPage.total_pages; page += 1) {
+    const nextPage = await getEmployees({
+      ...params,
+      page,
+      pageSize: MAX_PAGE_SIZE,
+    });
+
+    allItems.push(...nextPage.items);
+  }
+
+  return {
+    items: allItems,
+    total: firstPage.total,
+    page: 1,
+    page_size: allItems.length,
+    total_pages: 1,
+  };
 };
 
 export const createEmployee = async (
   payload: EmployeeCreatePayload
-): Promise<Employee> => {
-  const response = await fetch("/api/employees", {
+): Promise<EmployeeMessageResponse> => {
+  return requestJson<EmployeeMessageResponse>("/api/backend/employees", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    throw new Error(await getApiErrorMessage(response, "Failed to create employee"));
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
 };
 
 export const updateEmployee = async (
-  id: number,
+  employeeId: number,
   payload: EmployeeUpdatePayload
-): Promise<Employee> => {
-  const response = await fetch(`/api/employees/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(await getApiErrorMessage(response, "Failed to update employee"));
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
+): Promise<EmployeeMessageResponse> => {
+  return requestJson<EmployeeMessageResponse>(
+    `/api/backend/employees/${employeeId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
 };
 
-export const deactivateEmployee = async (id: number): Promise<Employee> => {
-  const response = await fetch(`/api/employees/${id}/inactive`, {
-    method: "PATCH",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to mark employee inactive")
-    );
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
+export const deactivateEmployee = async (
+  employeeId: number
+): Promise<EmployeeMessageResponse> => {
+  return requestJson<EmployeeMessageResponse>(
+    `/api/backend/employees/${employeeId}`,
+    {
+      method: "DELETE",
+    }
+  );
 };
 
-export const restoreEmployee = async (id: number): Promise<Employee> => {
-  const response = await fetch(`/api/employees/${id}/restore`, {
-    method: "PATCH",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(await getApiErrorMessage(response, "Failed to restore employee"));
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
+export const restoreEmployee = async (
+  employeeId: number
+): Promise<EmployeeMessageResponse> => {
+  return requestJson<EmployeeMessageResponse>(
+    `/api/backend/employees/${employeeId}/restore`,
+    {
+      method: "PATCH",
+    }
+  );
 };
 
-export const permanentlyDeleteEmployee = async (id: number): Promise<void> => {
-  const response = await fetch(`/api/employees/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  });
-
-  if (!response.ok && response.status !== 204) {
-    throw new Error(
-      await getApiErrorMessage(response, "Failed to permanently delete employee")
-    );
-  }
+export const permanentlyDeleteEmployee = async (
+  employeeId: number
+): Promise<EmployeeMessageResponse> => {
+  return requestJson<EmployeeMessageResponse>(
+    `/api/backend/employees/${employeeId}/permanent`,
+    {
+      method: "DELETE",
+    }
+  );
 };
 
 export const uploadEmployeePhoto = async (
-  id: number,
+  employeeId: number,
   file: File
-): Promise<Employee> => {
+): Promise<EmployeeMessageResponse> => {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`/api/employees/${id}/photo`, {
+  const response = await fetch(`/api/backend/employees/${employeeId}/photo`, {
     method: "POST",
-    credentials: "include",
     body: formData,
+    cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error(await getApiErrorMessage(response, "Failed to upload photo"));
+    throw new Error(await getErrorMessage(response));
   }
 
-  const data = await response.json();
-  return data.data ?? data;
+  return response.json();
 };
 
-export const deleteEmployeePhoto = async (id: number): Promise<Employee> => {
-  const response = await fetch(`/api/employees/${id}/photo`, {
-    method: "DELETE",
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(await getApiErrorMessage(response, "Failed to delete photo"));
-  }
-
-  const data = await response.json();
-  return data.data ?? data;
+export const deleteEmployeePhoto = async (
+  employeeId: number
+): Promise<EmployeeMessageResponse> => {
+  return requestJson<EmployeeMessageResponse>(
+    `/api/backend/employees/${employeeId}/photo`,
+    {
+      method: "DELETE",
+    }
+  );
 };

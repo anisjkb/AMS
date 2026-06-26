@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Bell,
   Command,
@@ -14,18 +15,69 @@ import { useRouter } from "next/navigation";
 import EnterpriseSidebar from "./EnterpriseSidebar";
 import { logout } from "@/services/auth";
 import {
+  clearNavigationCache,
   NavigationProvider,
   useNavigation,
 } from "@/contexts/NavigationContext";
+import { getCurrentUser, type CurrentUser } from "@/services/currentUser";
+
+function getUserDisplayName(user: CurrentUser | null) {
+  if (!user) return "Loading user...";
+
+  return user.full_name || user.user_id || user.email || "AMS User";
+}
+
+function getUserSubtitle(user: CurrentUser | null) {
+  if (!user) return "Please wait";
+
+  if (user.is_superuser) {
+    return "Super Admin";
+  }
+
+  if (user.user_id && user.email) {
+    return `${user.user_id} / ${user.email}`;
+  }
+
+  return user.email || user.user_id || "Authenticated User";
+}
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { navigation, loading } = useNavigation();
 
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [userLoading, setUserLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void getCurrentUser()
+      .then((user) => {
+        if (!isMounted) return;
+
+        setCurrentUser(user);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+
+        console.error("Failed to load current user:", error);
+        setCurrentUser(null);
+      })
+      .finally(() => {
+        if (!isMounted) return;
+
+        setUserLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleLogout = async () => {
     await logout();
-    router.push("/login");
-    router.refresh();
+    clearNavigationCache();
+    router.replace("/login");
   };
 
   return (
@@ -79,10 +131,14 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
               <div className="hidden items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm md:flex">
                 <UserCircle size={24} className="text-blue-600" />
                 <div>
-                  <p className="text-sm font-bold text-slate-800">
-                    Super Admin
+                  <p className="max-w-48 truncate text-sm font-bold text-slate-800">
+                    {userLoading
+                      ? "Loading user..."
+                      : getUserDisplayName(currentUser)}
                   </p>
-                  <p className="text-xs text-slate-400">Administrator</p>
+                  <p className="max-w-56 truncate text-xs text-slate-400">
+                    {getUserSubtitle(currentUser)}
+                  </p>
                 </div>
               </div>
 

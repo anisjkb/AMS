@@ -373,12 +373,14 @@ useEffect(() => {
 
       const payload = buildPayload();
 
-      const savedEmployee = initialData
-        ? await updateEmployee(initialData.id, payload)
+      const savedResponse = initialData
+        ? await updateEmployee(initialData.id, payload) 
         : await createEmployee(payload);
 
-      if (selectedPhoto) {
-        await uploadEmployeePhoto(savedEmployee.id, selectedPhoto);
+      const savedEmployeeId = savedResponse.data?.id ?? initialData?.id;
+
+      if (selectedPhoto && savedEmployeeId) {
+        await uploadEmployeePhoto(savedEmployeeId, selectedPhoto);
       }
 
       onSuccess();

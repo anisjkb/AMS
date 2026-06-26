@@ -1,3 +1,5 @@
+//src\components\layout\EnterpriseSidebar.tsx
+
 "use client";
 
 import Link from "next/link";
@@ -19,17 +21,32 @@ export default function EnterpriseSidebar({
     const initial: Record<string, boolean> = {};
 
     navigation.forEach((group) => {
-      initial[group.group_key] = true;
+      const isDashboardGroup = group.group_key === "dashboard";
+      const hasActiveMenu = group.menus.some(
+        (menu) => menu.route_path === pathname
+      );
+
+      initial[group.group_key] = isDashboardGroup || hasActiveMenu;
     });
 
     return initial;
   });
 
   const toggleGroup = (groupKey: string) => {
-    setOpenGroups((prev) => ({
-      ...prev,
-      [groupKey]: !prev[groupKey],
-    }));
+    setOpenGroups((prev) => { 
+      const isAlreadyOpen = Boolean(prev[groupKey]); 
+      if (isAlreadyOpen) { 
+        return {
+          ...prev, 
+          [groupKey]: false, 
+        }; 
+      }
+      
+      return navigation.reduce<Record<string, boolean>>((acc, group) => {
+        acc[group.group_key] = group.group_key === groupKey;
+        return acc;
+      },{}); 
+    });
   };
 
   return (
@@ -52,7 +69,7 @@ export default function EnterpriseSidebar({
       <nav className="space-y-4 p-4">
         {navigation.map((group) => {
           const GroupIcon = getIcon(group.group_icon);
-          const isOpen = openGroups[group.group_key];
+          const isOpen = Boolean(openGroups[group.group_key]);
 
           return (
             <div

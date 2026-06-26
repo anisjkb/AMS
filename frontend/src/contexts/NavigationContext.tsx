@@ -1,3 +1,5 @@
+//E:\Audit\AMS\frontend\src\contexts\NavigationContext.tsx
+
 "use client";
 
 import {
@@ -28,16 +30,90 @@ type NavigationContextValue = {
 
 const NavigationContext = createContext<NavigationContextValue | null>(null);
 
+export const NAVIGATION_CACHE_KEY = "ams_navigation_cache";
+
+let navigationRequestPromise: Promise<NavigationGroup[]> | null = null;
+
+const readNavigationCache = (): NavigationGroup[] | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const cachedNavigation = sessionStorage.getItem(NAVIGATION_CACHE_KEY);
+
+    if (!cachedNavigation) {
+      return null;
+    }
+
+    const parsedNavigation = JSON.parse(cachedNavigation);
+
+    if (!Array.isArray(parsedNavigation)) {
+      return null;
+    }
+
+    return parsedNavigation as NavigationGroup[];
+  } catch {
+    return null;
+  }
+};
+
+const writeNavigationCache = (navigation: NavigationGroup[]) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    sessionStorage.setItem(NAVIGATION_CACHE_KEY, JSON.stringify(navigation));
+  } catch {
+    // Ignore storage errors.
+  }
+};
+
+export const clearNavigationCache = () => {
+  navigationRequestPromise = null;
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    sessionStorage.removeItem(NAVIGATION_CACHE_KEY);
+  } catch {
+    // Ignore storage errors.
+  }
+};
+
+const fetchNavigationOnce = (forceRefresh = false) => {
+  if (!forceRefresh && navigationRequestPromise) {
+    return navigationRequestPromise;
+  }
+
+  navigationRequestPromise = getMyNavigation()
+    .then((data) => {
+      writeNavigationCache(data);
+      return data;
+    })
+    .finally(() => {
+      navigationRequestPromise = null;
+    });
+
+  return navigationRequestPromise;
+};
+
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const [navigation, setNavigation] = useState<NavigationGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   const reloadNavigation = useCallback(async () => {
     try {
-      const data = await getMyNavigation();
+      setLoading(true);
+
+      const data = await fetchNavigationOnce(true);
       setNavigation(data);
     } catch (error) {
       console.error("Failed to load AMS navigation:", error);
+      clearNavigationCache();
       setNavigation([]);
     } finally {
       setLoading(false);
@@ -47,22 +123,33 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    getMyNavigation()
+    const request = Promise.resolve().then(async () => {
+      const cachedNavigation = readNavigationCache();
+
+      if (cachedNavigation) {
+        return cachedNavigation;
+      }
+
+      return fetchNavigationOnce(false);
+    });
+
+    void request
       .then((data) => {
-        if (!cancelled) {
-          setNavigation(data);
-        }
+        if (cancelled) return;
+
+        setNavigation(data);
       })
       .catch((error) => {
-        if (!cancelled) {
-          console.error("Failed to load AMS navigation:", error);
-          setNavigation([]);
-        }
+        if (cancelled) return;
+
+        console.error("Failed to load AMS navigation:", error);
+        clearNavigationCache();
+        setNavigation([]);
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (cancelled) return;
+
+        setLoading(false);
       });
 
     return () => {
