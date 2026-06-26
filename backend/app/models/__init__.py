@@ -13,6 +13,42 @@ from app.models.menu import Menu
 from app.models.menu_action import MenuAction
 from app.models.menu_permission import MenuPermission
 from app.models.menu_action_permission import MenuActionPermission
+from app.models.audit_subject import AuditSubject
+from app.models.audit_entity import AuditEntity
+from app.models.audit_entity_business_activity import AuditEntityBusinessActivity
+from app.models.audit_entity_exchange_listing import AuditEntityExchangeListing
+from app.models.audit_entity_address import (
+    AuditEntityAddress,
+    AuditEntityAddressType,
+)
+from app.models.audit_entity_contact import (
+    AuditEntityContact,
+    AuditEntityContactType,
+)
+from app.models.audit_entity_director import (
+    AuditEntityDirector,
+    AuditEntityDirectorType,
+)
+from app.models.audit_entity_license import (
+    AuditEntityLicense,
+    AuditEntityLicenseType,
+)
+from app.models.audit_entity_facility import (
+    AuditEntityFacility,
+    AuditEntityFacilityType,
+)
+from app.models.audit_entity_financial_snapshot import (
+    AuditEntityFinancialSnapshot,
+)
+from app.models.audit_entity_tax_assessment import (
+    AuditEntityTaxAssessment,
+)
+from app.models.legal_status import LegalStatus
+from app.models.business_master import (
+    BusinessIndustry,
+    BusinessNature,
+    BusinessSector,
+)
 
 __all__ = [
     "User",
@@ -30,4 +66,24 @@ __all__ = [
     "MenuAction",
     "MenuPermission",
     "MenuActionPermission",
+    "AuditSubject",
+    "AuditEntity",
+    "AuditEntityBusinessActivity",
+    "AuditEntityExchangeListing",
+    "AuditEntityAddress",
+    "AuditEntityAddressType",
+    "AuditEntityContact",
+    "AuditEntityContactType",
+    "AuditEntityDirector",
+    "AuditEntityDirectorType",
+    "AuditEntityLicense",
+    "AuditEntityLicenseType",
+    "AuditEntityFacility",
+    "AuditEntityFacilityType",
+    "AuditEntityFinancialSnapshot",
+    "AuditEntityTaxAssessment",
+    "LegalStatus",
+    "BusinessNature",
+    "BusinessSector",
+    "BusinessIndustry",
 ]
