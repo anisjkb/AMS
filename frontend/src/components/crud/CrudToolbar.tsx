@@ -22,6 +22,7 @@ export type CrudToolbarFilter =
       type: "select";
       value: string;
       options: CrudToolbarOption[];
+      disabled?: boolean;
       onChange: (value: string) => void;
     };
 
@@ -67,8 +68,9 @@ export default function CrudToolbar({
                 </span>
                 <select
                   value={filter.value}
+                  disabled={filter.disabled}
                   onChange={(event) => filter.onChange(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100 disabled:bg-slate-50"
                 >
                   {filter.options.map((option) => (
                     <option key={option.value || "empty"} value={option.value}>

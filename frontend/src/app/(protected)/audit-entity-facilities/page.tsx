@@ -19,14 +19,22 @@ import {
   Phone,
   Plus,
   RotateCcw,
-  Search,
   ShieldCheck,
   Trash2,
-  X,
 } from "lucide-react";
 
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useModuleActions } from "@/hooks/useModuleActions";
+import CrudPagination from "@/components/crud/CrudPagination";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
+import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
 import {
   createAuditEntityFacility,
@@ -44,7 +52,6 @@ import {
 } from "@/services/auditEntityFacility";
 
 type StatusFilter = "all" | "active" | "inactive";
-type PageSizeOption = 10 | 20 | 30 | 40 | 50 | 100 | "all";
 type DrawerMode = "create" | "edit";
 type ConfirmAction = "delete" | "restore" | "permanent_delete";
 type BooleanFilter = "" | "yes" | "no";
@@ -80,8 +87,6 @@ type FormState = {
   description: string;
   remarks: string;
 };
-
-const pageSizeOptions: PageSizeOption[] = [10, 20, 30, 40, 50, 100, "all"];
 
 const facilityStatusOptions: {
   value: AuditEntityFacilityStatus;
@@ -280,7 +285,7 @@ export default function AuditEntityFacilitiesPage() {
   const [totalRecords, setTotalRecords] = useState(0);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] = useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [entityFilter, setEntityFilter] = useState("");
   const [facilityTypeFilter, setFacilityTypeFilter] = useState("");
@@ -306,7 +311,7 @@ export default function AuditEntityFacilitiesPage() {
 
   const debouncedSearch = useDebouncedValue(search, 400);
 
-  const numericPageSize = pageSize === "all" ? 100 : pageSize;
+  const numericPageSize = pageSize === "all" ? 100 : Number(pageSize);
 
   const entityById = useMemo(() => {
     return new Map(auditEntities.map((entity) => [entity.id, entity]));
@@ -322,8 +327,6 @@ export default function AuditEntityFacilitiesPage() {
     return Math.max(1, Math.ceil(totalRecords / numericPageSize));
   }, [numericPageSize, totalRecords]);
 
-  const showingFrom = totalRecords === 0 ? 0 : (page - 1) * numericPageSize + 1;
-  const showingTo = Math.min(page * numericPageSize, totalRecords);
 
   const isReadOnly = !actions.canCreate && !actions.canUpdate;
 
@@ -441,13 +444,16 @@ export default function AuditEntityFacilitiesPage() {
   const closeDrawer = () => {
     if (isSaving) return;
 
+    setErrorMessage("");
+    setSuccessMessage("");
+
     setIsDrawerOpen(false);
     setSelectedFacility(null);
     setForm(initialForm);
   };
 
   const handlePageSizeChange = (value: string) => {
-    setPageSize(value === "all" ? "all" : (Number(value) as PageSizeOption));
+    setPageSize(value as CrudPageSizeOption);
     setPage(1);
   };
 
@@ -620,10 +626,6 @@ export default function AuditEntityFacilitiesPage() {
     }
   };
 
-  const goFirst = () => setPage(1);
-  const goPrevious = () => setPage((current) => Math.max(1, current - 1));
-  const goNext = () => setPage((current) => Math.min(totalPages, current + 1));
-  const goLast = () => setPage(totalPages);
 
   return (
     <div className="space-y-6">
@@ -659,186 +661,153 @@ export default function AuditEntityFacilitiesPage() {
           </div>
         </div>
 
-        <div className="border-b border-slate-200 px-6 py-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Show
-              </span>
-              <select
-                value={String(pageSize)}
-                onChange={(event) => handlePageSizeChange(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                {pageSizeOptions.map((option) => (
-                  <option key={String(option)} value={String(option)}>
-                    {option === "all" ? "All" : option}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <CrudToolbar
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+          onRefresh={() => void loadFacilities()}
+          onReset={() => {
+            setSearch("");
+            setStatusFilter("all");
+            setEntityFilter("");
+            setFacilityTypeFilter("");
+            setFacilityStatusFilter("");
+            setOwnershipTypeFilter("");
+            setPrimaryFilter("");
+            setOperationalFilter("");
+            setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+            setPage(1);
+          }}
+          filters={[
+            {
+              key: "search",
+              label: "Search",
+              type: "search",
+              value: search,
+              placeholder: "Search facility, city, contact, capacity...",
+              onChange: (value) => {
+                setSearch(value);
+                setPage(1);
+              },
+            },
+            {
+              key: "status",
+              label: "Status",
+              type: "select",
+              value: statusFilter,
+              options: [
+                { value: "all", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ],
+              onChange: (value) => {
+                setStatusFilter(value as StatusFilter);
+                setPage(1);
+              },
+            },
+            {
+              key: "entity",
+              label: "Entity",
+              type: "select",
+              value: entityFilter,
+              disabled: isMasterLoading,
+              options: [
+                { value: "", label: "All" },
+                ...auditEntities.map((entity) => ({
+                  value: String(entity.id),
+                  label: entity.entity_name,
+                })),
+              ],
+              onChange: (value) => {
+                setEntityFilter(value);
+                setPage(1);
+              },
+            },
+            {
+              key: "facility_type",
+              label: "Facility Type",
+              type: "select",
+              value: facilityTypeFilter,
+              disabled: isMasterLoading,
+              options: [
+                { value: "", label: "All" },
+                ...facilityTypes.map((type) => ({
+                  value: String(type.id),
+                  label: type.facility_type_name,
+                })),
+              ],
+              onChange: (value) => {
+                setFacilityTypeFilter(value);
+                setPage(1);
+              },
+            },
+            {
+              key: "facility_status",
+              label: "Facility Status",
+              type: "select",
+              value: facilityStatusFilter,
+              options: [
+                { value: "", label: "All" },
+                ...facilityStatusOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                })),
+              ],
+              onChange: (value) => {
+                setFacilityStatusFilter(value);
+                setPage(1);
+              },
+            },
+            {
+              key: "ownership",
+              label: "Ownership",
+              type: "select",
+              value: ownershipTypeFilter,
+              options: [
+                { value: "", label: "All" },
+                ...ownershipTypeOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                })),
+              ],
+              onChange: (value) => {
+                setOwnershipTypeFilter(value);
+                setPage(1);
+              },
+            },
+            {
+              key: "primary",
+              label: "Primary",
+              type: "select",
+              value: primaryFilter,
+              options: [
+                { value: "", label: "All" },
+                { value: "yes", label: "Yes" },
+                { value: "no", label: "No" },
+              ],
+              onChange: (value) => {
+                setPrimaryFilter(value as BooleanFilter);
+                setPage(1);
+              },
+            },
+            {
+              key: "operational",
+              label: "Operational",
+              type: "select",
+              value: operationalFilter,
+              options: [
+                { value: "", label: "All" },
+                { value: "yes", label: "Yes" },
+                { value: "no", label: "No" },
+              ],
+              onChange: (value) => {
+                setOperationalFilter(value as BooleanFilter);
+                setPage(1);
+              },
+            },
+          ]}
+        />
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Search
-              </span>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search facility, city, contact, capacity..."
-                  className="w-full rounded-xl border border-slate-200 bg-white px-9 py-2 text-sm outline-none transition focus:border-slate-500"
-                />
-              </div>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Status
-              </span>
-              <select
-                value={statusFilter}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value as StatusFilter);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Entity
-              </span>
-              <select
-                value={entityFilter}
-                onChange={(event) => {
-                  setEntityFilter(event.target.value);
-                  setPage(1);
-                }}
-                disabled={isMasterLoading}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-              >
-                <option value="">All</option>
-                {auditEntities.map((entity) => (
-                  <option key={entity.id} value={String(entity.id)}>
-                    {entity.entity_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Facility Type
-              </span>
-              <select
-                value={facilityTypeFilter}
-                onChange={(event) => {
-                  setFacilityTypeFilter(event.target.value);
-                  setPage(1);
-                }}
-                disabled={isMasterLoading}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-              >
-                <option value="">All</option>
-                {facilityTypes.map((type) => (
-                  <option key={type.id} value={String(type.id)}>
-                    {type.facility_type_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Facility Status
-              </span>
-              <select
-                value={facilityStatusFilter}
-                onChange={(event) => {
-                  setFacilityStatusFilter(event.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                {facilityStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Ownership
-              </span>
-              <select
-                value={ownershipTypeFilter}
-                onChange={(event) => {
-                  setOwnershipTypeFilter(event.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                {ownershipTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Primary
-              </span>
-              <select
-                value={primaryFilter}
-                onChange={(event) => {
-                  setPrimaryFilter(event.target.value as BooleanFilter);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Operational
-              </span>
-              <select
-                value={operationalFilter}
-                onChange={(event) => {
-                  setOperationalFilter(event.target.value as BooleanFilter);
-                  setPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        {errorMessage ? (
+        {errorMessage && !isDrawerOpen ? (
           <div className="mx-6 mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {errorMessage}
           </div>
@@ -1091,662 +1060,476 @@ export default function AuditEntityFacilitiesPage() {
           </table>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            Showing{" "}
-            <span className="font-semibold text-slate-900">{showingFrom}</span>{" "}
-            to{" "}
-            <span className="font-semibold text-slate-900">{showingTo}</span>{" "}
-            of{" "}
-            <span className="font-semibold text-slate-900">{totalRecords}</span>{" "}
-            records
-          </div>
+        <CrudPagination
+          page={page}
+          totalPages={totalPages}
+          total={totalRecords}
+          pageSize={numericPageSize}
+          onPageChange={setPage}
+        />
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={goFirst}
-              disabled={page === 1}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              First
-            </button>
-            <button
-              type="button"
-              onClick={goPrevious}
-              disabled={page === 1}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="rounded-xl bg-slate-100 px-3 py-1.5 font-semibold text-slate-900">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={page >= totalPages}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              onClick={goLast}
-              disabled={page >= totalPages}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Last
-            </button>
-          </div>
-        </div>
       </section>
 
-      {isDrawerOpen ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm">
-          <div className="h-full w-full max-w-5xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  {drawerMode === "create"
-                    ? "Create Facility / Factory"
-                    : "Edit Facility / Factory"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Keep facility identity, location, contact and operation
-                  details.
-                </p>
-              </div>
+      <CrudDrawer
+        isOpen={isDrawerOpen}
+        onClose={closeDrawer}
+        title={
+          drawerMode === "create"
+            ? "Create Facility / Factory"
+            : "Edit Facility / Factory"
+        }
+        description="Keep facility identity, location, contact and operation details."
+        maxWidthClassName="max-w-5xl"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              disabled={isSaving}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
 
-              <button
-                type="button"
-                onClick={closeDrawer}
-                className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6 px-6 py-6">
+            <button
+              type="submit"
+              form="facility-form"
+              disabled={isSaving || isReadOnly}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              Save Facility
+            </button>
+          </>
+        }
+      >
+            <form id="facility-form" onSubmit={handleSubmit} className="space-y-6">
               {isReadOnly ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                   You do not have create/update permission for this module.
                 </div>
               ) : null}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Audit Entity <span className="text-rose-500">*</span>
-                  </span>
-                  <select
-                    value={form.audit_entity_id}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        audit_entity_id: event.target.value,
-                      }))
-                    }
-                    disabled={isMasterLoading}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-                  >
-                    <option value="">
-                      {isMasterLoading ? "Loading entities..." : "Select entity"}
-                    </option>
-                    {auditEntities.map((entity) => (
-                      <option key={entity.id} value={String(entity.id)}>
-                        {entity.entity_name} ({entity.entity_code})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Facility Type <span className="text-rose-500">*</span>
-                  </span>
-                  <select
-                    value={form.facility_type_id}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        facility_type_id: event.target.value,
-                      }))
-                    }
-                    disabled={isMasterLoading}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-                  >
-                    <option value="">Select facility type</option>
-                    {facilityTypes.map((type) => (
-                      <option key={type.id} value={String(type.id)}>
-                        {type.facility_type_name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Facility Name <span className="text-rose-500">*</span>
-                  </span>
-                  <input
-                    value={form.facility_name}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        facility_name: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: Gazipur Factory"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Facility Code
-                  </span>
-                  <input
-                    value={form.facility_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        facility_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: FAC-001"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Facility Status
-                  </span>
-                  <select
-                    value={form.facility_status}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        facility_status: event.target
-                          .value as AuditEntityFacilityStatus,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    {facilityStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Ownership Type
-                  </span>
-                  <select
-                    value={form.ownership_type}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        ownership_type: event.target
-                          .value as "" | AuditEntityFacilityOwnershipType,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    <option value="">Select ownership</option>
-                    {ownershipTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Registration No
-                  </span>
-                  <input
-                    value={form.registration_no}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        registration_no: event.target.value,
-                      }))
-                    }
-                    placeholder="Factory / facility registration no"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Contact Person
-                  </span>
-                  <input
-                    value={form.contact_person}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        contact_person: event.target.value,
-                      }))
-                    }
-                    placeholder="Facility contact person"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Contact Email
-                  </span>
-                  <input
-                    value={form.contact_email}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        contact_email: event.target.value,
-                      }))
-                    }
-                    placeholder="facility@example.com"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Contact Phone
-                  </span>
-                  <input
-                    value={form.contact_phone}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        contact_phone: event.target.value,
-                      }))
-                    }
-                    placeholder="Facility phone"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Address Line 1
-                  </span>
-                  <textarea
-                    value={form.address_line1}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        address_line1: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="Main address"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Address Line 2
-                  </span>
-                  <textarea
-                    value={form.address_line2}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        address_line2: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="Additional address"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Division Code
-                  </span>
-                  <input
-                    value={form.division_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        division_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Division code"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    District Code
-                  </span>
-                  <input
-                    value={form.district_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        district_code: event.target.value,
-                      }))
-                    }
-                    placeholder="District code"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Upazila Code
-                  </span>
-                  <input
-                    value={form.upazila_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        upazila_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Upazila code"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Post Code
-                  </span>
-                  <input
-                    value={form.post_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        post_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Post code"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    City
-                  </span>
-                  <input
-                    value={form.city}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        city: event.target.value,
-                      }))
-                    }
-                    placeholder="City"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Country
-                  </span>
-                  <input
-                    value={form.country}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        country: event.target.value,
-                      }))
-                    }
-                    placeholder="Bangladesh"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Latitude
-                  </span>
-                  <input
-                    value={form.latitude}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        latitude: event.target.value,
-                      }))
-                    }
-                    type="number"
-                    step="0.0000001"
-                    placeholder="Example: 23.8103310"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Longitude
-                  </span>
-                  <input
-                    value={form.longitude}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        longitude: event.target.value,
-                      }))
-                    }
-                    type="number"
-                    step="0.0000001"
-                    placeholder="Example: 90.4125210"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Floor Area Sqft
-                  </span>
-                  <input
-                    value={form.floor_area_sqft}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        floor_area_sqft: event.target.value,
-                      }))
-                    }
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Example: 50000"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Number of Employees
-                  </span>
-                  <input
-                    value={form.number_of_employees}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        number_of_employees: event.target.value,
-                      }))
-                    }
-                    type="number"
-                    min="0"
-                    placeholder="Example: 500"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Production Capacity
-                  </span>
-                  <input
-                    value={form.production_capacity}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        production_capacity: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: 100,000 units per month"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Opening Date
-                  </span>
-                  <input
-                    value={form.opening_date}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        opening_date: event.target.value,
-                      }))
-                    }
-                    type="date"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Closing Date
-                  </span>
-                  <input
-                    value={form.closing_date}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        closing_date: event.target.value,
-                      }))
-                    }
-                    type="date"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Primary
-                  </span>
-                  <select
-                    value={form.is_primary ? "yes" : "no"}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        is_primary: event.target.value === "yes",
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                </label>
-
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Operational
-                  </span>
-                  <select
-                    value={form.is_operational ? "yes" : "no"}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        is_operational: event.target.value === "yes",
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                </label>
-
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Description
-                  </span>
-                  <textarea
-                    value={form.description}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        description: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder="Facility description"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Remarks
-                  </span>
-                  <textarea
-                    value={form.remarks}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        remarks: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder="Optional remarks"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
-              </div>
-
+              {/* Drawer form validation/error message */}
               {errorMessage ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                   {errorMessage}
                 </div>
               ) : null}
 
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
-                <button
-                  type="button"
-                  onClick={closeDrawer}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
+              <div className="grid gap-4 md:grid-cols-2">
+                <CrudSelectField
+                  label="Audit Entity"
+                  value={form.audit_entity_id}
+                  required
+                  disabled={isMasterLoading}
+                  className="md:col-span-2"
+                  options={[
+                    {
+                      value: "",
+                      label: isMasterLoading
+                        ? "Loading entities..."
+                        : "Select entity",
+                    },
+                    ...auditEntities.map((entity) => ({
+                      value: String(entity.id),
+                      label: `${entity.entity_name} (${entity.entity_code})`,
+                    })),
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      audit_entity_id: value,
+                    }))
+                  }
+                />
 
-                <button
-                  type="submit"
-                  disabled={isSaving || isReadOnly}
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
-                  Save
-                </button>
+                <CrudSelectField
+                  label="Facility Type"
+                  value={form.facility_type_id}
+                  required
+                  disabled={isMasterLoading}
+                  options={[
+                    { value: "", label: "Select facility type" },
+                    ...facilityTypes.map((type) => ({
+                      value: String(type.id),
+                      label: type.facility_type_name,
+                    })),
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      facility_type_id: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Facility Name"
+                  value={form.facility_name}
+                  required
+                  placeholder="Example: Gazipur Factory"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      facility_name: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Facility Code"
+                  value={form.facility_code}
+                  placeholder="Example: FAC-001"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      facility_code: value,
+                    }))
+                  }
+                />
+
+                <CrudSelectField
+                  label="Facility Status"
+                  value={form.facility_status}
+                  options={facilityStatusOptions}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      facility_status: value as AuditEntityFacilityStatus,
+                    }))
+                  }
+                />
+
+                <CrudSelectField
+                  label="Ownership Type"
+                  value={form.ownership_type}
+                  options={[
+                    { value: "", label: "Select ownership" },
+                    ...ownershipTypeOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    })),
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      ownership_type:
+                        value as "" | AuditEntityFacilityOwnershipType,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Registration No"
+                  value={form.registration_no}
+                  placeholder="Factory / facility registration no"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      registration_no: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Contact Person"
+                  value={form.contact_person}
+                  placeholder="Facility contact person"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      contact_person: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Contact Email"
+                  type="email"
+                  value={form.contact_email}
+                  placeholder="facility@example.com"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      contact_email: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Contact Phone"
+                  type="tel"
+                  value={form.contact_phone}
+                  placeholder="Facility phone"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      contact_phone: value,
+                    }))
+                  }
+                />
+
+                <CrudTextAreaField
+                  label="Address Line 1"
+                  value={form.address_line1}
+                  rows={2}
+                  placeholder="Main address"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      address_line1: value,
+                    }))
+                  }
+                />
+
+                <CrudTextAreaField
+                  label="Address Line 2"
+                  value={form.address_line2}
+                  rows={2}
+                  placeholder="Additional address"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      address_line2: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Division Code"
+                  value={form.division_code}
+                  placeholder="Division code"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      division_code: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="District Code"
+                  value={form.district_code}
+                  placeholder="District code"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      district_code: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Upazila Code"
+                  value={form.upazila_code}
+                  placeholder="Upazila code"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      upazila_code: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Post Code"
+                  value={form.post_code}
+                  placeholder="Post code"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      post_code: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="City"
+                  value={form.city}
+                  placeholder="City"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      city: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Country"
+                  value={form.country}
+                  placeholder="Bangladesh"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      country: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Latitude"
+                  type="number"
+                  step="0.0000001"
+                  value={form.latitude}
+                  placeholder="Example: 23.8103310"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      latitude: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Longitude"
+                  type="number"
+                  step="0.0000001"
+                  value={form.longitude}
+                  placeholder="Example: 90.4125210"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      longitude: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Floor Area Sqft"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.floor_area_sqft}
+                  placeholder="Example: 50000"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      floor_area_sqft: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Number of Employees"
+                  type="number"
+                  min="0"
+                  value={form.number_of_employees}
+                  placeholder="Example: 500"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      number_of_employees: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Production Capacity"
+                  value={form.production_capacity}
+                  placeholder="Example: 100,000 units per month"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      production_capacity: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Opening Date"
+                  type="date"
+                  value={form.opening_date}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      opening_date: value,
+                    }))
+                  }
+                />
+
+                <CrudTextField
+                  label="Closing Date"
+                  type="date"
+                  value={form.closing_date}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      closing_date: value,
+                    }))
+                  }
+                />
+
+                <CrudSelectField
+                  label="Primary"
+                  value={form.is_primary ? "yes" : "no"}
+                  options={[
+                    { value: "no", label: "No" },
+                    { value: "yes", label: "Yes" },
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      is_primary: value === "yes",
+                    }))
+                  }
+                />
+
+                <CrudSelectField
+                  label="Operational"
+                  value={form.is_operational ? "yes" : "no"}
+                  options={[
+                    { value: "no", label: "No" },
+                    { value: "yes", label: "Yes" },
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      is_operational: value === "yes",
+                    }))
+                  }
+                />
+
+                <CrudTextAreaField
+                  label="Description"
+                  value={form.description}
+                  rows={3}
+                  placeholder="Facility description"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      description: value,
+                    }))
+                  }
+                />
+
+                <CrudTextAreaField
+                  label="Remarks"
+                  value={form.remarks}
+                  rows={3}
+                  placeholder="Optional remarks"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      remarks: value,
+                    }))
+                  }
+                />
+
               </div>
+
             </form>
-          </div>
-        </div>
-      ) : null}
+      </CrudDrawer>
 
       {confirmTarget && confirmAction ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 backdrop-blur-sm">
