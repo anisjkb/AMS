@@ -674,7 +674,7 @@ export default function AuditEntityTaxAssessmentsPage() {
         />
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1200px] w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-300 w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
