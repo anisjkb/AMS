@@ -17,14 +17,22 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  Search,
   ShieldCheck,
   Trash2,
-  X,
 } from "lucide-react";
 
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useModuleActions } from "@/hooks/useModuleActions";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import CrudPagination from "@/components/crud/CrudPagination";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
+import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
 import {
   createAuditEntityLicense,
@@ -41,7 +49,6 @@ import {
 } from "@/services/auditEntityLicense";
 
 type StatusFilter = "all" | "active" | "inactive";
-type PageSizeOption = 10 | 20 | 30 | 40 | 50 | 100 | "all";
 type DrawerMode = "create" | "edit";
 type ConfirmAction = "delete" | "restore" | "permanent_delete";
 type BooleanFilter = "" | "yes" | "no";
@@ -62,8 +69,6 @@ type FormState = {
   is_verified: boolean;
   remarks: string;
 };
-
-const pageSizeOptions: PageSizeOption[] = [10, 20, 30, 40, 50, 100, "all"];
 
 const licenseStatusOptions: {
   value: AuditEntityLicenseStatus;
@@ -176,7 +181,7 @@ export default function AuditEntityLicensesPage() {
   const [totalRecords, setTotalRecords] = useState(0);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] = useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [entityFilter, setEntityFilter] = useState("");
   const [licenseTypeFilter, setLicenseTypeFilter] = useState("");
@@ -201,7 +206,7 @@ export default function AuditEntityLicensesPage() {
 
   const debouncedSearch = useDebouncedValue(search, 400);
 
-  const numericPageSize = pageSize === "all" ? 100 : pageSize;
+  const numericPageSize = pageSize === "all" ? 100 : Number(pageSize);
 
   const entityById = useMemo(() => {
     return new Map(auditEntities.map((entity) => [entity.id, entity]));
@@ -217,8 +222,6 @@ export default function AuditEntityLicensesPage() {
     return Math.max(1, Math.ceil(totalRecords / numericPageSize));
   }, [numericPageSize, totalRecords]);
 
-  const showingFrom = totalRecords === 0 ? 0 : (page - 1) * numericPageSize + 1;
-  const showingTo = Math.min(page * numericPageSize, totalRecords);
 
   const isReadOnly = !actions.canCreate && !actions.canUpdate;
 
@@ -337,7 +340,7 @@ export default function AuditEntityLicensesPage() {
   };
 
   const handlePageSizeChange = (value: string) => {
-    setPageSize(value === "all" ? "all" : (Number(value) as PageSizeOption));
+    setPageSize(value as CrudPageSizeOption);
     setPage(1);
   };
 
@@ -505,10 +508,6 @@ export default function AuditEntityLicensesPage() {
     }
   };
 
-  const goFirst = () => setPage(1);
-  const goPrevious = () => setPage((current) => Math.max(1, current - 1));
-  const goNext = () => setPage((current) => Math.min(totalPages, current + 1));
-  const goLast = () => setPage(totalPages);
 
   return (
     <div className="space-y-6">
@@ -545,164 +544,129 @@ export default function AuditEntityLicensesPage() {
           </div>
         </div>
 
-        <div className="border-b border-slate-200 px-6 py-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Show
-              </span>
-              <select
-                value={String(pageSize)}
-                onChange={(event) => handlePageSizeChange(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                {pageSizeOptions.map((option) => (
-                  <option key={String(option)} value={String(option)}>
-                    {option === "all" ? "All" : option}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <CrudToolbar
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+          onRefresh={loadLicenses}
+          onReset={() => {
+            setSearch("");
+            setStatusFilter("all");
+            setEntityFilter("");
+            setLicenseTypeFilter("");
+            setLicenseStatusFilter("");
+            setMandatoryFilter("");
+            setVerifiedFilter("");
+            setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+            setPage(1);
+          }}
+          filters={[
+            {
+              key: "search",
+              label: "Search",
+              type: "search",
+              value: search,
+              placeholder: "Search license no, authority, document ref...",
+              onChange: handleSearchChange,
+            },
+            {
+              key: "status",
+              label: "Status",
+              type: "select",
+              value: statusFilter,
+              options: [
+                { value: "all", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ],
+              onChange: (value) =>
+                handleStatusFilterChange(value as StatusFilter),
+            },
+            {
+              key: "entity",
+              label: "Entity",
+              type: "select",
+              value: entityFilter,
+              disabled: isMasterLoading,
+              options: [
+                { value: "", label: "All" },
+                ...auditEntities.map((entity) => ({
+                  value: String(entity.id),
+                  label: entity.entity_name,
+                })),
+              ],
+              onChange: handleEntityFilterChange,
+            },
+            {
+              key: "licenseType",
+              label: "License Type",
+              type: "select",
+              value: licenseTypeFilter,
+              disabled: isMasterLoading,
+              options: [
+                { value: "", label: "All" },
+                ...licenseTypes.map((type) => ({
+                  value: String(type.id),
+                  label: type.license_type_name,
+                })),
+              ],
+              onChange: handleLicenseTypeFilterChange,
+            },
+            {
+              key: "licenseStatus",
+              label: "License Status",
+              type: "select",
+              value: licenseStatusFilter,
+              options: [
+                { value: "", label: "All" },
+                ...licenseStatusOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                })),
+              ],
+              onChange: handleLicenseStatusFilterChange,
+            },
+            {
+              key: "mandatory",
+              label: "Mandatory",
+              type: "select",
+              value: mandatoryFilter,
+              options: [
+                { value: "", label: "All" },
+                { value: "yes", label: "Yes" },
+                { value: "no", label: "No" },
+              ],
+              onChange: (value) =>
+                handleMandatoryFilterChange(value as BooleanFilter),
+            },
+            {
+              key: "verified",
+              label: "Verified",
+              type: "select",
+              value: verifiedFilter,
+              options: [
+                { value: "", label: "All" },
+                { value: "yes", label: "Yes" },
+                { value: "no", label: "No" },
+              ],
+              onChange: (value) =>
+                handleVerifiedFilterChange(value as BooleanFilter),
+            },
+          ]}
+        />
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Search
-              </span>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(event) => handleSearchChange(event.target.value)}
-                  placeholder="Search license no, authority, document ref..."
-                  className="w-full rounded-xl border border-slate-200 bg-white px-9 py-2 text-sm outline-none transition focus:border-slate-500"
-                />
+        {(successMessage || (errorMessage && !isDrawerOpen)) ? (
+          <div className="border-b border-slate-200 px-6 py-4">
+            {successMessage ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                {successMessage}
               </div>
-            </label>
+            ) : null}
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Status
-              </span>
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  handleStatusFilterChange(event.target.value as StatusFilter)
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Entity
-              </span>
-              <select
-                value={entityFilter}
-                onChange={(event) =>
-                  handleEntityFilterChange(event.target.value)
-                }
-                disabled={isMasterLoading}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-              >
-                <option value="">All</option>
-                {auditEntities.map((entity) => (
-                  <option key={entity.id} value={String(entity.id)}>
-                    {entity.entity_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                License Type
-              </span>
-              <select
-                value={licenseTypeFilter}
-                onChange={(event) =>
-                  handleLicenseTypeFilterChange(event.target.value)
-                }
-                disabled={isMasterLoading}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-              >
-                <option value="">All</option>
-                {licenseTypes.map((type) => (
-                  <option key={type.id} value={String(type.id)}>
-                    {type.license_type_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                License Status
-              </span>
-              <select
-                value={licenseStatusFilter}
-                onChange={(event) =>
-                  handleLicenseStatusFilterChange(event.target.value)
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                {licenseStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Mandatory
-              </span>
-              <select
-                value={mandatoryFilter}
-                onChange={(event) =>
-                  handleMandatoryFilterChange(event.target.value as BooleanFilter)
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Verified
-              </span>
-              <select
-                value={verifiedFilter}
-                onChange={(event) =>
-                  handleVerifiedFilterChange(event.target.value as BooleanFilter)
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        {errorMessage ? (
-          <div className="mx-6 mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {errorMessage}
-          </div>
-        ) : null}
-
-        {successMessage ? (
-          <div className="mx-6 mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {successMessage}
+            {errorMessage && !isDrawerOpen ? (
+              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {errorMessage}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -922,83 +886,48 @@ export default function AuditEntityLicensesPage() {
           </table>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            Showing{" "}
-            <span className="font-semibold text-slate-900">{showingFrom}</span>{" "}
-            to{" "}
-            <span className="font-semibold text-slate-900">{showingTo}</span>{" "}
-            of{" "}
-            <span className="font-semibold text-slate-900">{totalRecords}</span>{" "}
-            records
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={goFirst}
-              disabled={page === 1}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              First
-            </button>
-            <button
-              type="button"
-              onClick={goPrevious}
-              disabled={page === 1}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="rounded-xl bg-slate-100 px-3 py-1.5 font-semibold text-slate-900">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={page >= totalPages}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              onClick={goLast}
-              disabled={page >= totalPages}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Last
-            </button>
-          </div>
-        </div>
+        <CrudPagination
+          page={page}
+          totalPages={totalPages}
+          total={totalRecords}
+          pageSize={numericPageSize}
+          onPageChange={setPage}
+        />
       </section>
 
-      {isDrawerOpen ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm">
-          <div className="h-full w-full max-w-3xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  {drawerMode === "create"
-                    ? "Create Entity License"
-                    : "Edit Entity License"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Keep regulatory license number, authority, expiry and
-                  verification status.
-                </p>
-              </div>
+      <CrudDrawer
+        isOpen={isDrawerOpen}
+        onClose={closeDrawer}
+        title={drawerMode === "create" ? "Create Entity License" : "Edit Entity License"}
+        description="Keep regulatory license number, authority, expiry and verification status."
+        maxWidthClassName="max-w-3xl"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
 
-              <button
-                type="button"
-                onClick={closeDrawer}
-                className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6 px-6 py-6">
+            <button
+              type="submit"
+              form="entity-license-form"
+              disabled={isSaving || isReadOnly}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              Save
+            </button>
+          </>
+        }
+      >
+        <form id="entity-license-form" onSubmit={handleSubmit} className="space-y-6">
               {isReadOnly ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                   You do not have create/update permission for this module.
@@ -1006,270 +935,204 @@ export default function AuditEntityLicensesPage() {
               ) : null}
 
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Audit Entity <span className="text-rose-500">*</span>
-                  </span>
-                  <select
-                    value={form.audit_entity_id}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        audit_entity_id: event.target.value,
-                      }))
-                    }
-                    disabled={isMasterLoading}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-                  >
-                    <option value="">
-                      {isMasterLoading ? "Loading entities..." : "Select entity"}
-                    </option>
-                    {auditEntities.map((entity) => (
-                      <option key={entity.id} value={String(entity.id)}>
-                        {entity.entity_name} ({entity.entity_code})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="Audit Entity"
+                  value={form.audit_entity_id}
+                  required
+                  disabled={isMasterLoading}
+                  className="md:col-span-2"
+                  options={[
+                    {
+                      value: "",
+                      label: isMasterLoading
+                        ? "Loading entities..."
+                        : "Select entity",
+                    },
+                    ...auditEntities.map((entity) => ({
+                      value: String(entity.id),
+                      label: `${entity.entity_name} (${entity.entity_code})`,
+                    })),
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      audit_entity_id: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    License Type <span className="text-rose-500">*</span>
-                  </span>
-                  <select
-                    value={form.license_type_id}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        license_type_id: event.target.value,
-                      }))
-                    }
-                    disabled={isMasterLoading}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-                  >
-                    <option value="">Select license type</option>
-                    {licenseTypes.map((type) => (
-                      <option key={type.id} value={String(type.id)}>
-                        {type.license_type_name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="License Type"
+                  value={form.license_type_id}
+                  required
+                  disabled={isMasterLoading}
+                  options={[
+                    { value: "", label: "Select license type" },
+                    ...licenseTypes.map((type) => ({
+                      value: String(type.id),
+                      label: type.license_type_name,
+                    })),
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      license_type_id: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    License No <span className="text-rose-500">*</span>
-                  </span>
-                  <input
-                    value={form.license_no}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        license_no: event.target.value,
-                      }))
-                    }
-                    placeholder="License / registration number"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="License No"
+                  value={form.license_no}
+                  required
+                  placeholder="License / registration number"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      license_no: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    License Name
-                  </span>
-                  <input
-                    value={form.license_name}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        license_name: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional display name"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="License Name"
+                  value={form.license_name}
+                  placeholder="Optional display name"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      license_name: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    License Status
-                  </span>
-                  <select
-                    value={form.license_status}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        license_status: event.target
-                          .value as AuditEntityLicenseStatus,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    {licenseStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="License Status"
+                  value={form.license_status}
+                  options={licenseStatusOptions}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      license_status: value as AuditEntityLicenseStatus,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Issuing Authority
-                  </span>
-                  <input
-                    value={form.issuing_authority}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        issuing_authority: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: RJSC, NBR, City Corporation"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Issuing Authority"
+                  value={form.issuing_authority}
+                  placeholder="Example: RJSC, NBR, City Corporation"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      issuing_authority: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Issuing Country
-                  </span>
-                  <input
-                    value={form.issuing_country}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        issuing_country: event.target.value,
-                      }))
-                    }
-                    placeholder="Bangladesh"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Issuing Country"
+                  value={form.issuing_country}
+                  placeholder="Bangladesh"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      issuing_country: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Issue Date
-                  </span>
-                  <input
-                    value={form.issue_date}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        issue_date: event.target.value,
-                      }))
-                    }
-                    type="date"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Issue Date"
+                  type="date"
+                  value={form.issue_date}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      issue_date: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Expiry Date
-                  </span>
-                  <input
-                    value={form.expiry_date}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        expiry_date: event.target.value,
-                      }))
-                    }
-                    type="date"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Expiry Date"
+                  type="date"
+                  value={form.expiry_date}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      expiry_date: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Renewal Due Date
-                  </span>
-                  <input
-                    value={form.renewal_due_date}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        renewal_due_date: event.target.value,
-                      }))
-                    }
-                    type="date"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Renewal Due Date"
+                  type="date"
+                  value={form.renewal_due_date}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      renewal_due_date: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Document Reference
-                  </span>
-                  <input
-                    value={form.document_reference}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        document_reference: event.target.value,
-                      }))
-                    }
-                    placeholder="File ID / document code / location"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Document Reference"
+                  value={form.document_reference}
+                  placeholder="File ID / document code / location"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      document_reference: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Mandatory
-                  </span>
-                  <select
-                    value={form.is_mandatory ? "yes" : "no"}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        is_mandatory: event.target.value === "yes",
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="Mandatory"
+                  value={form.is_mandatory ? "yes" : "no"}
+                  options={[
+                    { value: "no", label: "No" },
+                    { value: "yes", label: "Yes" },
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      is_mandatory: value === "yes",
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Verified
-                  </span>
-                  <select
-                    value={form.is_verified ? "yes" : "no"}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        is_verified: event.target.value === "yes",
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="Verified"
+                  value={form.is_verified ? "yes" : "no"}
+                  options={[
+                    { value: "no", label: "No" },
+                    { value: "yes", label: "Yes" },
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      is_verified: value === "yes",
+                    }))
+                  }
+                />
 
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Remarks
-                  </span>
-                  <textarea
-                    value={form.remarks}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        remarks: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder="Optional remarks"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextAreaField
+                  label="Remarks"
+                  value={form.remarks}
+                  rows={3}
+                  placeholder="Optional remarks"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      remarks: value,
+                    }))
+                  }
+                />
               </div>
 
               {errorMessage ? (
@@ -1277,33 +1140,8 @@ export default function AuditEntityLicensesPage() {
                   {errorMessage}
                 </div>
               ) : null}
-
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
-                <button
-                  type="button"
-                  onClick={closeDrawer}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSaving || isReadOnly}
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
-                  Save
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
+        </form>
+      </CrudDrawer>
 
       {confirmTarget && confirmAction ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 backdrop-blur-sm">
