@@ -1,26 +1,11 @@
 "use client";
 
-import { getIcon } from "@/components/layout/IconMapper";
+import { AlertTriangle, Pencil, RotateCcw, Trash2 } from "lucide-react";
+
 import { useNavigation } from "@/contexts/NavigationContext";
 import type { Branch } from "@/types/branch";
 
 const rowActionKeys = ["update", "delete", "restore", "permanent_delete"];
-
-const buttonStyleMap: Record<string, string> = {
-  warning:
-    "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200",
-  danger: "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200",
-  success:
-    "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200",
-  secondary:
-    "bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200",
-};
-
-const getDisplayTitle = (actionKey: string, defaultTitle: string) => {
-  if (actionKey === "delete") return "Inactive";
-  if (actionKey === "permanent_delete") return "Permanent Delete";
-  return defaultTitle;
-};
 
 export default function BranchRowActions({
   branch,
@@ -37,70 +22,69 @@ export default function BranchRowActions({
 }) {
   const { getActionsByMenuKey } = useNavigation();
 
-  const actions = getActionsByMenuKey("branch")
-    .filter((action) => rowActionKeys.includes(action.action_key))
-    .filter((action) => {
-      if (action.action_key === "delete") {
-        return branch.is_active;
-      }
+  const allowedActionKeys = new Set(
+    getActionsByMenuKey("branch")
+      .filter((action) => rowActionKeys.includes(action.action_key))
+      .map((action) => action.action_key),
+  );
 
-      if (action.action_key === "restore") {
-        return !branch.is_active;
-      }
+  const canEdit = allowedActionKeys.has("update");
+  const canDeactivate =
+    branch.is_active &&
+    (allowedActionKeys.has("delete") || allowedActionKeys.has("inactive"));
+  const canRestore = !branch.is_active && allowedActionKeys.has("restore");
+  const canPermanentDelete =
+    !branch.is_active && allowedActionKeys.has("permanent_delete");
 
-      if (action.action_key === "permanent_delete") {
-        return !branch.is_active;
-      }
-
-      return true;
-    });
-
-  if (actions.length === 0) {
-    return <span className="text-slate-400">No actions</span>;
+  if (!canEdit && !canDeactivate && !canRestore && !canPermanentDelete) {
+    return <span className="text-xs font-semibold text-slate-400">No actions</span>;
   }
-
-  const handleActionClick = (actionKey: string) => {
-    if (actionKey === "update") {
-      onEdit(branch);
-      return;
-    }
-
-    if (actionKey === "delete") {
-      onInactive(branch);
-      return;
-    }
-
-    if (actionKey === "restore") {
-      onRestore(branch);
-      return;
-    }
-
-    if (actionKey === "permanent_delete") {
-      onPermanentDelete(branch);
-    }
-  };
 
   return (
     <div className="flex justify-end gap-2">
-      {actions.map((action) => {
-        const Icon = getIcon(action.button_icon);
-        const color = action.button_color ?? "secondary";
-        const title = getDisplayTitle(action.action_key, action.action_title);
+      {canEdit ? (
+        <button
+          type="button"
+          onClick={() => onEdit(branch)}
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          title="Edit"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      ) : null}
 
-        return (
-          <button
-            key={action.id}
-            type="button"
-            title={title}
-            onClick={() => handleActionClick(action.action_key)}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold transition ${
-              buttonStyleMap[color] ?? buttonStyleMap.secondary
-            }`}
-          >
-            <Icon size={16} />
-          </button>
-        );
-      })}
+      {canDeactivate ? (
+        <button
+          type="button"
+          onClick={() => onInactive(branch)}
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+          title="Inactive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      ) : null}
+
+      {canRestore ? (
+        <button
+          type="button"
+          onClick={() => onRestore(branch)}
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+          title="Restore"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </button>
+      ) : null}
+
+      {canPermanentDelete ? (
+        <button
+          type="button"
+          onClick={() => onPermanentDelete(branch)}
+          className="rounded-xl border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50"
+          title="Permanent delete"
+        >
+          <AlertTriangle className="h-4 w-4" />
+        </button>
+      ) : null}
     </div>
   );
 }

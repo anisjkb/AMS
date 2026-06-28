@@ -4,6 +4,7 @@ export default function CrudTextField({
   label,
   value,
   onChange,
+  onBlur,
   placeholder,
   type = "text",
   required = false,
@@ -16,6 +17,7 @@ export default function CrudTextField({
   label: string;
   value: string;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   placeholder?: string;
   type?: "text" | "email" | "tel" | "url" | "date" | "number";
   required?: boolean;
@@ -39,6 +41,7 @@ export default function CrudTextField({
         step={step}
         min={min}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-100 disabled:bg-slate-50 ${inputClassName}`}
       />
