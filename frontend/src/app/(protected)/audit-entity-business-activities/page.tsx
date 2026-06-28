@@ -9,14 +9,23 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  Search,
   Star,
   Trash2,
-  X,
 } from "lucide-react";
 
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useModuleActions } from "@/hooks/useModuleActions";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import CrudPagination from "@/components/crud/CrudPagination";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
+import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+import CrudCheckboxField from "@/components/crud/fields/CrudCheckboxField";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import {
   createAuditEntityBusinessActivity,
   deactivateAuditEntityBusinessActivity,
@@ -39,9 +48,12 @@ import {
 
 type StatusFilter = "all" | "active" | "inactive";
 type PrimaryFilter = "all" | "primary" | "other";
-type PageSizeOption = 10 | 20 | 30 | 40 | 50 | 100 | "all";
 type DrawerMode = "create" | "edit";
 type ConfirmAction = "delete" | "restore" | "permanent_delete";
+type PageMessage = {
+  type: "success" | "error";
+  text: string;
+};
 
 type FormState = {
   audit_entity_id: string;
@@ -58,7 +70,6 @@ type FormState = {
 };
 
 const riskRatings = ["low", "medium", "high", "critical"];
-const pageSizeOptions: PageSizeOption[] = [10, 20, 30, 40, 50, 100, "all"];
 
 const emptyForm: FormState = {
   audit_entity_id: "",
@@ -98,9 +109,6 @@ function toRequiredNumber(value: string) {
   return Number(value);
 }
 
-function parsePageSize(value: string): PageSizeOption {
-  return value === "all" ? "all" : (Number(value) as PageSizeOption);
-}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-GB", {
@@ -145,7 +153,7 @@ export default function AuditEntityBusinessActivitiesPage() {
   >([]);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(20);
+  const [pageSize, setPageSize] = useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [primaryFilter, setPrimaryFilter] = useState<PrimaryFilter>("all");
@@ -155,7 +163,7 @@ export default function AuditEntityBusinessActivitiesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [masterLoading, setMasterLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<PageMessage | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
@@ -170,7 +178,7 @@ export default function AuditEntityBusinessActivitiesPage() {
   );
 
   const debouncedSearch = useDebouncedValue(search, 400);
-  const numericPageSize = pageSize === "all" ? 100 : pageSize;
+  const numericPageSize = pageSize === "all" ? 100 : Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(total / numericPageSize));
 
   const auditEntityById = useMemo(() => {
@@ -257,7 +265,7 @@ export default function AuditEntityBusinessActivitiesPage() {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to load master data.";
 
-      setMessage(errorMessage);
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setMasterLoading(false);
     }
@@ -265,7 +273,6 @@ export default function AuditEntityBusinessActivitiesPage() {
 
   const loadActivities = useCallback(async () => {
     setIsLoading(true);
-    setMessage(null);
 
     try {
       const response = await listAuditEntityBusinessActivities({
@@ -287,7 +294,7 @@ export default function AuditEntityBusinessActivitiesPage() {
           ? error.message
           : "Failed to load business activities.";
 
-      setMessage(errorMessage);
+      setMessage({ type: "error", text: errorMessage });
       setItems([]);
       setTotal(0);
     } finally {
@@ -406,12 +413,12 @@ export default function AuditEntityBusinessActivitiesPage() {
     event.preventDefault();
 
     if (!form.audit_entity_id) {
-      setMessage("Audit entity is required.");
+      setMessage({ type: "error", text: "Audit entity is required." });
       return;
     }
 
     if (!form.activity_name.trim()) {
-      setMessage("Activity name is required.");
+      setMessage({ type: "error", text: "Activity name is required." });
       return;
     }
 
@@ -420,7 +427,7 @@ export default function AuditEntityBusinessActivitiesPage() {
       !form.business_sector_id ||
       !form.business_industry_id
     ) {
-      setMessage("Business nature, sector, and industry are required.");
+      setMessage({ type: "error", text: "Business nature, sector, and industry are required." });
       return;
     }
 
@@ -432,10 +439,10 @@ export default function AuditEntityBusinessActivitiesPage() {
 
       if (drawerMode === "edit" && selectedActivity) {
         await updateAuditEntityBusinessActivity(selectedActivity.id, payload);
-        setMessage("Business activity updated successfully.");
+        setMessage({ type: "success", text: "Business activity updated successfully." });
       } else {
         await createAuditEntityBusinessActivity(payload);
-        setMessage("Business activity created successfully.");
+        setMessage({ type: "success", text: "Business activity created successfully." });
       }
 
       setDrawerOpen(false);
@@ -449,7 +456,7 @@ export default function AuditEntityBusinessActivitiesPage() {
           ? error.message
           : "Failed to save business activity.";
 
-      setMessage(errorMessage);
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setSubmitLoading(false);
     }
@@ -464,17 +471,17 @@ export default function AuditEntityBusinessActivitiesPage() {
     try {
       if (confirmAction === "delete") {
         await deactivateAuditEntityBusinessActivity(confirmActivity.id);
-        setMessage("Business activity deactivated successfully.");
+        setMessage({ type: "success", text: "Business activity deactivated successfully." });
       }
 
       if (confirmAction === "restore") {
         await restoreAuditEntityBusinessActivity(confirmActivity.id);
-        setMessage("Business activity restored successfully.");
+        setMessage({ type: "success", text: "Business activity restored successfully." });
       }
 
       if (confirmAction === "permanent_delete") {
         await permanentDeleteAuditEntityBusinessActivity(confirmActivity.id);
-        setMessage("Business activity permanently deleted successfully.");
+        setMessage({ type: "success", text: "Business activity permanently deleted successfully." });
       }
 
       clearConfirm();
@@ -484,7 +491,7 @@ export default function AuditEntityBusinessActivitiesPage() {
       const errorMessage =
         error instanceof Error ? error.message : "Action failed.";
 
-      setMessage(errorMessage);
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setSubmitLoading(false);
     }
@@ -504,8 +511,6 @@ export default function AuditEntityBusinessActivitiesPage() {
     };
   };
 
-  const showingFrom = total === 0 ? 0 : (page - 1) * numericPageSize + 1;
-  const showingTo = Math.min(page * numericPageSize, total);
 
   return (
     <div className="space-y-6">
@@ -552,106 +557,92 @@ export default function AuditEntityBusinessActivitiesPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 border-b border-slate-100 p-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Show
-            </label>
-            <select
-              value={String(pageSize)}
-              onChange={(event) => {
-                setPageSize(parsePageSize(event.target.value));
+        <CrudToolbar
+          pageSize={pageSize}
+          onPageSizeChange={(value) => {
+            setPageSize(value as CrudPageSizeOption);
+            resetToFirstPage();
+          }}
+          onRefresh={loadActivities}
+          onReset={() => {
+            setSearch("");
+            setEntityFilter("all");
+            setPrimaryFilter("all");
+            setStatusFilter("all");
+            setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+            resetToFirstPage();
+          }}
+          filters={[
+            {
+              key: "search",
+              label: "Search",
+              type: "search",
+              value: search,
+              placeholder: "Search activity code, name, description...",
+              onChange: (value) => {
+                setSearch(value);
                 resetToFirstPage();
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"
-            >
-              {pageSizeOptions.map((option) => (
-                <option key={String(option)} value={String(option)}>
-                  {option === "all" ? "All" : option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Search
-            </label>
-            <div className="flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-              <Search size={18} className="text-slate-400" />
-              <input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  resetToFirstPage();
-                }}
-                placeholder="Search activity code, name, description..."
-                className="ml-2 w-full bg-transparent text-sm outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Entity
-            </label>
-            <select
-              value={entityFilter}
-              onChange={(event) => {
-                setEntityFilter(event.target.value);
+              },
+            },
+            {
+              key: "entity",
+              label: "Entity",
+              type: "select",
+              value: entityFilter,
+              options: [
+                { value: "all", label: "All Entities" },
+                ...auditEntities.map((entity) => ({
+                  value: String(entity.id),
+                  label: entity.entity_name,
+                })),
+              ],
+              onChange: (value) => {
+                setEntityFilter(value);
                 resetToFirstPage();
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"
-            >
-              <option value="all">All Entities</option>
-              {auditEntities.map((entity) => (
-                <option key={entity.id} value={String(entity.id)}>
-                  {entity.entity_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Primary
-            </label>
-            <select
-              value={primaryFilter}
-              onChange={(event) => {
-                setPrimaryFilter(event.target.value as PrimaryFilter);
+              },
+            },
+            {
+              key: "primary",
+              label: "Primary",
+              type: "select",
+              value: primaryFilter,
+              options: [
+                { value: "all", label: "All" },
+                { value: "primary", label: "Primary" },
+                { value: "other", label: "Other" },
+              ],
+              onChange: (value) => {
+                setPrimaryFilter(value as PrimaryFilter);
                 resetToFirstPage();
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"
-            >
-              <option value="all">All</option>
-              <option value="primary">Primary</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value as StatusFilter);
+              },
+            },
+            {
+              key: "status",
+              label: "Status",
+              type: "select",
+              value: statusFilter,
+              options: [
+                { value: "all", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ],
+              onChange: (value) => {
+                setStatusFilter(value as StatusFilter);
                 resetToFirstPage();
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-        </div>
+              },
+            },
+          ]}
+        />
 
-        {message ? (
-          <div className="border-b border-amber-100 bg-amber-50 px-5 py-3 text-sm font-bold text-amber-700">
-            {message}
+        {message && !drawerOpen ? (
+          <div
+            className={`border-b px-5 py-3 text-sm font-bold ${
+              message.type === "success"
+                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                : "border-rose-100 bg-rose-50 text-rose-700"
+            }`}
+          >
+            {message.text}
           </div>
         ) : null}
 
@@ -829,280 +820,233 @@ export default function AuditEntityBusinessActivitiesPage() {
           </table>
         </div>
 
-        <div className="flex flex-col justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 md:flex-row md:items-center">
-          <p>
-            Showing{" "}
-            <span className="font-black text-slate-700">{showingFrom}</span> to{" "}
-            <span className="font-black text-slate-700">{showingTo}</span> of{" "}
-            <span className="font-black text-slate-700">{total}</span> records
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage(1)}
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              First
-            </button>
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="rounded-lg bg-slate-900 px-3 py-2 font-black text-white">
-              {page} / {totalPages}
-            </span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() =>
-                setPage((current) => Math.min(totalPages, current + 1))
-              }
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage(totalPages)}
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Last
-            </button>
-          </div>
-        </div>
+        <CrudPagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={numericPageSize}
+          onPageChange={setPage}
+        />
       </section>
 
-      {drawerOpen ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm">
-          <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-blue-600">
-                  {drawerMode === "create" ? "Create" : "Edit"}
-                </p>
-                <h2 className="text-xl font-black text-slate-900">
-                  Business Activity
-                </h2>
-              </div>
-              <button
-                onClick={closeDrawer}
-                className="rounded-xl border border-slate-200 p-2 transition hover:bg-slate-50"
-              >
-                <X size={20} />
-              </button>
-            </div>
+      <CrudDrawer
+        isOpen={drawerOpen}
+        onClose={closeDrawer}
+        title="Business Activity"
+        description={drawerMode === "create" ? "Create" : "Edit"}
+        maxWidthClassName="max-w-2xl"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
 
-            <form onSubmit={handleSubmit} className="space-y-5 p-6">
-              <select
-                required
-                value={form.audit_entity_id}
-                disabled={masterLoading}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    audit_entity_id: event.target.value,
-                  }))
-                }
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:bg-slate-50"
-              >
-                <option value="">
-                  {masterLoading ? "Loading..." : "Select Audit Entity"}
-                </option>
-                {auditEntities.map((entity) => (
-                  <option key={entity.id} value={String(entity.id)}>
-                    {entity.entity_name}
-                  </option>
-                ))}
-              </select>
+            <button
+              type="submit"
+              form="entity-business-activity-form"
+              disabled={submitLoading}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              {drawerMode === "create" ? "Create" : "Update"}
+            </button>
+          </>
+        }
+      >
+        <form
+          id="entity-business-activity-form"
+          onSubmit={handleSubmit}
+          className="space-y-5"
+        >
+          <CrudSelectField
+            label="Audit Entity"
+            value={form.audit_entity_id}
+            required
+            disabled={masterLoading}
+            options={[
+              {
+                value: "",
+                label: masterLoading ? "Loading..." : "Select Audit Entity",
+              },
+              ...auditEntities.map((entity) => ({
+                value: String(entity.id),
+                label: entity.entity_name,
+              })),
+            ]}
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                audit_entity_id: value,
+              }))
+            }
+          />
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <input
-                  value={form.activity_code}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      activity_code: event.target.value,
-                    }))
-                  }
-                  placeholder="Activity Code - auto generated if blank"
-                  className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
+          <div className="grid gap-4 md:grid-cols-2">
+            <CrudTextField
+              label="Activity Code"
+              value={form.activity_code}
+              placeholder="Auto generated if blank"
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  activity_code: value,
+                }))
+              }
+            />
 
-                <input
-                  required
-                  value={form.activity_name}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      activity_name: event.target.value,
-                    }))
-                  }
-                  placeholder="Activity Name"
-                  className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <select
-                  required
-                  value={form.business_nature_id}
-                  disabled={masterLoading}
-                  onChange={(event) =>
-                    handleBusinessNatureChange(event.target.value)
-                  }
-                  className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:bg-slate-50"
-                >
-                  <option value="">Business Nature</option>
-                  {businessNatures.map((nature) => (
-                    <option key={nature.id} value={String(nature.id)}>
-                      {nature.nature_name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  required
-                  value={form.business_sector_id}
-                  disabled={!form.business_nature_id || masterLoading}
-                  onChange={(event) =>
-                    handleBusinessSectorChange(event.target.value)
-                  }
-                  className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:bg-slate-50"
-                >
-                  <option value="">Business Sector</option>
-                  {filteredBusinessSectors.map((sector) => (
-                    <option key={sector.id} value={String(sector.id)}>
-                      {sector.sector_name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  required
-                  value={form.business_industry_id}
-                  disabled={!form.business_sector_id || masterLoading}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      business_industry_id: event.target.value,
-                    }))
-                  }
-                  className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:bg-slate-50"
-                >
-                  <option value="">Business Industry</option>
-                  {filteredBusinessIndustries.map((industry) => (
-                    <option key={industry.id} value={String(industry.id)}>
-                      {industry.industry_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <select
-                  value={form.risk_rating}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      risk_rating: event.target.value,
-                    }))
-                  }
-                  className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                >
-                  <option value="">Risk Rating</option>
-                  {riskRatings.map((risk) => (
-                    <option key={risk} value={risk}>
-                      {toTitle(risk)}
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={form.revenue_percentage}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      revenue_percentage: event.target.value,
-                    }))
-                  }
-                  placeholder="Revenue Percentage"
-                  className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
-
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm font-bold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.is_primary}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      is_primary: event.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4"
-                />
-                Mark as primary business activity
-              </label>
-
-              <textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                rows={3}
-                placeholder="Description"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-              />
-
-              <textarea
-                value={form.remarks}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    remarks: event.target.value,
-                  }))
-                }
-                rows={3}
-                placeholder="Remarks"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-              />
-
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
-                <button
-                  type="button"
-                  onClick={closeDrawer}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitLoading}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitLoading ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <CheckCircle2 size={18} />
-                  )}
-                  {drawerMode === "create" ? "Create" : "Update"}
-                </button>
-              </div>
-            </form>
+            <CrudTextField
+              label="Activity Name"
+              value={form.activity_name}
+              required
+              placeholder="Activity Name"
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  activity_name: value,
+                }))
+              }
+            />
           </div>
-        </div>
-      ) : null}
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <CrudSelectField
+              label="Business Nature"
+              value={form.business_nature_id}
+              required
+              disabled={masterLoading}
+              options={[
+                { value: "", label: "Business Nature" },
+                ...businessNatures.map((nature) => ({
+                  value: String(nature.id),
+                  label: nature.nature_name,
+                })),
+              ]}
+              onChange={handleBusinessNatureChange}
+            />
+
+            <CrudSelectField
+              label="Business Sector"
+              value={form.business_sector_id}
+              required
+              disabled={!form.business_nature_id || masterLoading}
+              options={[
+                { value: "", label: "Business Sector" },
+                ...filteredBusinessSectors.map((sector) => ({
+                  value: String(sector.id),
+                  label: sector.sector_name,
+                })),
+              ]}
+              onChange={handleBusinessSectorChange}
+            />
+
+            <CrudSelectField
+              label="Business Industry"
+              value={form.business_industry_id}
+              required
+              disabled={!form.business_sector_id || masterLoading}
+              options={[
+                { value: "", label: "Business Industry" },
+                ...filteredBusinessIndustries.map((industry) => ({
+                  value: String(industry.id),
+                  label: industry.industry_name,
+                })),
+              ]}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  business_industry_id: value,
+                }))
+              }
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <CrudSelectField
+              label="Risk Rating"
+              value={form.risk_rating}
+              options={[
+                { value: "", label: "Risk Rating" },
+                ...riskRatings.map((risk) => ({
+                  value: risk,
+                  label: toTitle(risk),
+                })),
+              ]}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  risk_rating: value,
+                }))
+              }
+            />
+
+            <CrudTextField
+              label="Revenue Percentage"
+              type="number"
+              value={form.revenue_percentage}
+              min="0"
+              step="0.01"
+              placeholder="Revenue Percentage"
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  revenue_percentage: value,
+                }))
+              }
+            />
+          </div>
+
+          <CrudCheckboxField
+            label="Mark as primary business activity"
+            checked={form.is_primary}
+            onChange={(checked) =>
+              setForm((current) => ({
+                ...current,
+                is_primary: checked,
+              }))
+            }
+          />
+
+          <CrudTextAreaField
+            label="Description"
+            value={form.description}
+            rows={3}
+            placeholder="Description"
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                description: value,
+              }))
+            }
+          />
+
+          <CrudTextAreaField
+            label="Remarks"
+            value={form.remarks}
+            rows={3}
+            placeholder="Remarks"
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                remarks: value,
+              }))
+            }
+          />
+
+          {message && drawerOpen && message.type === "error" ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              {message.text}
+            </div>
+          ) : null}
+        </form>
+      </CrudDrawer>
 
       {confirmActivity && confirmAction ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">

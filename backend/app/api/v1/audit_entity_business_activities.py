@@ -42,7 +42,7 @@ async def list_activities(
 ):
     service = AuditEntityBusinessActivityService(db)
 
-    return await service.list_activities(
+    return await service.list_business_activities(
         page=page,
         page_size=page_size,
         search=search,
@@ -68,7 +68,7 @@ async def get_activity(
 ):
     service = AuditEntityBusinessActivityService(db)
 
-    return await service.get_activity(activity_id)
+    return await service.get_business_activity(activity_id)
 
 
 @router.post(
@@ -85,7 +85,7 @@ async def create_activity(
 ):
     service = AuditEntityBusinessActivityService(db)
 
-    return await service.create_activity(
+    return await service.create_business_activity(
         payload=payload,
         created_by=current_user.user_id,
     )
@@ -105,7 +105,7 @@ async def update_activity(
 ):
     service = AuditEntityBusinessActivityService(db)
 
-    return await service.update_activity(
+    return await service.update_business_activity(
         activity_id=activity_id,
         payload=payload,
         updated_by=current_user.user_id,
@@ -125,7 +125,7 @@ async def delete_activity(
 ):
     service = AuditEntityBusinessActivityService(db)
 
-    return await service.deactivate_activity(
+    return await service.deactivate_business_activity(
         activity_id=activity_id,
         updated_by=current_user.user_id,
     )
@@ -144,7 +144,7 @@ async def restore_activity(
 ):
     service = AuditEntityBusinessActivityService(db)
 
-    return await service.restore_activity(
+    return await service.restore_business_activity(
         activity_id=activity_id,
         updated_by=current_user.user_id,
     )
@@ -163,7 +163,7 @@ async def permanent_delete_activity(
 ):
     service = AuditEntityBusinessActivityService(db)
 
-    return await service.permanent_delete_activity(
+    return await service.permanent_delete_business_activity(
         activity_id=activity_id,
         updated_by=current_user.user_id,
     )
