@@ -15,14 +15,22 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  Search,
   ShieldCheck,
   Trash2,
-  X,
 } from "lucide-react";
 
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useModuleActions } from "@/hooks/useModuleActions";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import CrudPagination from "@/components/crud/CrudPagination";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
+import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
 import {
   createAuditEntityAddress,
@@ -38,7 +46,6 @@ import {
 } from "@/services/auditEntityAddress";
 
 type StatusFilter = "all" | "active" | "inactive";
-type PageSizeOption = 10 | 20 | 30 | 40 | 50 | 100 | "all";
 type DrawerMode = "create" | "edit";
 type ConfirmAction = "delete" | "restore" | "permanent_delete";
 
@@ -58,8 +65,6 @@ type FormState = {
   is_primary: boolean;
   remarks: string;
 };
-
-const pageSizeOptions: PageSizeOption[] = [10, 20, 30, 40, 50, 100, "all"];
 
 const initialForm: FormState = {
   audit_entity_id: "",
@@ -120,7 +125,7 @@ export default function AuditEntityAddressesPage() {
   const [totalRecords, setTotalRecords] = useState(0);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] = useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [entityFilter, setEntityFilter] = useState("");
   const [addressTypeFilter, setAddressTypeFilter] = useState("");
@@ -143,7 +148,7 @@ export default function AuditEntityAddressesPage() {
 
   const debouncedSearch = useDebouncedValue(search, 400);
 
-  const numericPageSize = pageSize === "all" ? 100 : pageSize;
+  const numericPageSize = pageSize === "all" ? 100 : Number(pageSize);
 
   const entityById = useMemo(() => {
     return new Map(auditEntities.map((entity) => [entity.id, entity]));
@@ -159,8 +164,6 @@ export default function AuditEntityAddressesPage() {
     return Math.max(1, Math.ceil(totalRecords / numericPageSize));
   }, [numericPageSize, totalRecords]);
 
-  const showingFrom = totalRecords === 0 ? 0 : (page - 1) * numericPageSize + 1;
-  const showingTo = Math.min(page * numericPageSize, totalRecords);
 
   const isReadOnly = !actions.canCreate && !actions.canUpdate;
 
@@ -275,7 +278,7 @@ export default function AuditEntityAddressesPage() {
   };
 
   const handlePageSizeChange = (value: string) => {
-    setPageSize(value === "all" ? "all" : (Number(value) as PageSizeOption));
+    setPageSize(value as CrudPageSizeOption);
     setPage(1);
   };
 
@@ -422,10 +425,6 @@ export default function AuditEntityAddressesPage() {
     }
   };
 
-  const goFirst = () => setPage(1);
-  const goPrevious = () => setPage((current) => Math.max(1, current - 1));
-  const goNext = () => setPage((current) => Math.min(totalPages, current + 1));
-  const goLast = () => setPage(totalPages);
 
   return (
     <div className="space-y-6">
@@ -461,127 +460,99 @@ export default function AuditEntityAddressesPage() {
           </div>
         </div>
 
-        <div className="border-b border-slate-200 px-6 py-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Show
-              </span>
-              <select
-                value={String(pageSize)}
-                onChange={(event) => handlePageSizeChange(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                {pageSizeOptions.map((option) => (
-                  <option key={String(option)} value={String(option)}>
-                    {option === "all" ? "All" : option}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <CrudToolbar
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+          onRefresh={loadAddresses}
+          onReset={() => {
+            setSearch("");
+            setStatusFilter("all");
+            setEntityFilter("");
+            setAddressTypeFilter("");
+            setPrimaryFilter("");
+            setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+            setPage(1);
+          }}
+          filters={[
+            {
+              key: "search",
+              label: "Search",
+              type: "search",
+              value: search,
+              placeholder: "Search address, city, post code...",
+              onChange: handleSearchChange,
+            },
+            {
+              key: "status",
+              label: "Status",
+              type: "select",
+              value: statusFilter,
+              options: [
+                { value: "all", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ],
+              onChange: (value) =>
+                handleStatusFilterChange(value as StatusFilter),
+            },
+            {
+              key: "entity",
+              label: "Entity",
+              type: "select",
+              value: entityFilter,
+              disabled: isMasterLoading,
+              options: [
+                { value: "", label: "All" },
+                ...auditEntities.map((entity) => ({
+                  value: String(entity.id),
+                  label: entity.entity_name,
+                })),
+              ],
+              onChange: handleEntityFilterChange,
+            },
+            {
+              key: "addressType",
+              label: "Address Type",
+              type: "select",
+              value: addressTypeFilter,
+              disabled: isMasterLoading,
+              options: [
+                { value: "", label: "All" },
+                ...addressTypes.map((type) => ({
+                  value: String(type.id),
+                  label: type.address_type_name,
+                })),
+              ],
+              onChange: handleAddressTypeFilterChange,
+            },
+            {
+              key: "primary",
+              label: "Primary",
+              type: "select",
+              value: primaryFilter,
+              options: [
+                { value: "", label: "All" },
+                { value: "primary", label: "Primary" },
+                { value: "secondary", label: "Secondary" },
+              ],
+              onChange: handlePrimaryFilterChange,
+            },
+          ]}
+        />
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Search
-              </span>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={(event) => handleSearchChange(event.target.value)}
-                  placeholder="Search address, city, post code..."
-                  className="w-full rounded-xl border border-slate-200 bg-white px-9 py-2 text-sm outline-none transition focus:border-slate-500"
-                />
+        {(successMessage || (errorMessage && !isDrawerOpen)) ? (
+          <div className="border-b border-slate-200 px-6 py-4">
+            {successMessage ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                {successMessage}
               </div>
-            </label>
+            ) : null}
 
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Status
-              </span>
-              <select
-                value={statusFilter}
-                onChange={(event) =>
-                  handleStatusFilterChange(event.target.value as StatusFilter)
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Entity
-              </span>
-              <select
-                value={entityFilter}
-                onChange={(event) =>
-                  handleEntityFilterChange(event.target.value)
-                }
-                disabled={isMasterLoading}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-              >
-                <option value="">All</option>
-                {auditEntities.map((entity) => (
-                  <option key={entity.id} value={String(entity.id)}>
-                    {entity.entity_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Address Type
-              </span>
-              <select
-                value={addressTypeFilter}
-                onChange={(event) =>
-                  handleAddressTypeFilterChange(event.target.value)
-                }
-                disabled={isMasterLoading}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-              >
-                <option value="">All</option>
-                {addressTypes.map((type) => (
-                  <option key={type.id} value={String(type.id)}>
-                    {type.address_type_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">
-                Primary
-              </span>
-              <select
-                value={primaryFilter}
-                onChange={(event) =>
-                  handlePrimaryFilterChange(event.target.value)
-                }
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-              >
-                <option value="">All</option>
-                <option value="primary">Primary</option>
-                <option value="secondary">Secondary</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        {errorMessage ? (
-          <div className="mx-6 mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {errorMessage}
-          </div>
-        ) : null}
-
-        {successMessage ? (
-          <div className="mx-6 mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {successMessage}
+            {errorMessage && !isDrawerOpen ? (
+              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {errorMessage}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -762,82 +733,48 @@ export default function AuditEntityAddressesPage() {
           </table>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-4 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            Showing{" "}
-            <span className="font-semibold text-slate-900">{showingFrom}</span>{" "}
-            to{" "}
-            <span className="font-semibold text-slate-900">{showingTo}</span>{" "}
-            of{" "}
-            <span className="font-semibold text-slate-900">{totalRecords}</span>{" "}
-            records
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={goFirst}
-              disabled={page === 1}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              First
-            </button>
-            <button
-              type="button"
-              onClick={goPrevious}
-              disabled={page === 1}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="rounded-xl bg-slate-100 px-3 py-1.5 font-semibold text-slate-900">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={page >= totalPages}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              onClick={goLast}
-              disabled={page >= totalPages}
-              className="rounded-xl border border-slate-200 px-3 py-1.5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Last
-            </button>
-          </div>
-        </div>
+        <CrudPagination
+          page={page}
+          totalPages={totalPages}
+          total={totalRecords}
+          pageSize={numericPageSize}
+          onPageChange={setPage}
+        />
       </section>
 
-      {isDrawerOpen ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm">
-          <div className="h-full w-full max-w-3xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  {drawerMode === "create"
-                    ? "Create Entity Address"
-                    : "Edit Entity Address"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  One entity can keep multiple addresses by address type.
-                </p>
-              </div>
+      <CrudDrawer
+        isOpen={isDrawerOpen}
+        onClose={closeDrawer}
+        title={drawerMode === "create" ? "Create Address" : "Edit Address"}
+        description="Keep registered, mailing and operational address information for audit entities."
+        maxWidthClassName="max-w-3xl"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
 
-              <button
-                type="button"
-                onClick={closeDrawer}
-                className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6 px-6 py-6">
+            <button
+              type="submit"
+              form="entity-address-form"
+              disabled={isSaving || isReadOnly}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              Save
+            </button>
+          </>
+        }
+      >
+        <form id="entity-address-form" onSubmit={handleSubmit} className="space-y-6">
               {isReadOnly ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
                   You do not have create/update permission for this module.
@@ -845,264 +782,204 @@ export default function AuditEntityAddressesPage() {
               ) : null}
 
               <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Audit Entity <span className="text-rose-500">*</span>
-                  </span>
-                  <select
-                    value={form.audit_entity_id}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        audit_entity_id: event.target.value,
-                      }))
-                    }
-                    disabled={isMasterLoading}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-                  >
-                    <option value="">
-                      {isMasterLoading ? "Loading entities..." : "Select entity"}
-                    </option>
-                    {auditEntities.map((entity) => (
-                      <option key={entity.id} value={String(entity.id)}>
-                        {entity.entity_name} ({entity.entity_code})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="Audit Entity"
+                  value={form.audit_entity_id}
+                  required
+                  disabled={isMasterLoading}
+                  className="md:col-span-2"
+                  options={[
+                    {
+                      value: "",
+                      label: isMasterLoading
+                        ? "Loading entities..."
+                        : "Select entity",
+                    },
+                    ...auditEntities.map((entity) => ({
+                      value: String(entity.id),
+                      label: `${entity.entity_name} (${entity.entity_code})`,
+                    })),
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      audit_entity_id: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Address Type <span className="text-rose-500">*</span>
-                  </span>
-                  <select
-                    value={form.address_type_id}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        address_type_id: event.target.value,
-                      }))
-                    }
-                    disabled={isMasterLoading}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 disabled:bg-slate-50"
-                  >
-                    <option value="">Select address type</option>
-                    {addressTypes.map((type) => (
-                      <option key={type.id} value={String(type.id)}>
-                        {type.address_type_name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="Address Type"
+                  value={form.address_type_id}
+                  required
+                  disabled={isMasterLoading}
+                  options={[
+                    { value: "", label: "Select address type" },
+                    ...addressTypes.map((type) => ({
+                      value: String(type.id),
+                      label: type.address_type_name,
+                    })),
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      address_type_id: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Primary Status
-                  </span>
-                  <select
-                    value={form.is_primary ? "yes" : "no"}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        is_primary: event.target.value === "yes",
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                </label>
+                <CrudSelectField
+                  label="Primary Status"
+                  value={form.is_primary ? "yes" : "no"}
+                  options={[
+                    { value: "no", label: "No" },
+                    { value: "yes", label: "Yes" },
+                  ]}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      is_primary: value === "yes",
+                    }))
+                  }
+                />
 
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Address Line 1
-                  </span>
-                  <textarea
-                    value={form.address_line1}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        address_line1: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder="House, road, area, building, floor..."
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextAreaField
+                  label="Address Line 1"
+                  value={form.address_line1}
+                  rows={3}
+                  placeholder="House, road, area, building, floor..."
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      address_line1: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Address Line 2
-                  </span>
-                  <textarea
-                    value={form.address_line2}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        address_line2: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    placeholder="Additional address details"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextAreaField
+                  label="Address Line 2"
+                  value={form.address_line2}
+                  rows={2}
+                  placeholder="Additional address details"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      address_line2: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Division Code
-                  </span>
-                  <input
-                    value={form.division_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        division_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Division Code"
+                  value={form.division_code}
+                  placeholder="Optional"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      division_code: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    District Code
-                  </span>
-                  <input
-                    value={form.district_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        district_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="District Code"
+                  value={form.district_code}
+                  placeholder="Optional"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      district_code: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Upazila Code
-                  </span>
-                  <input
-                    value={form.upazila_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        upazila_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Upazila Code"
+                  value={form.upazila_code}
+                  placeholder="Optional"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      upazila_code: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Union Code
-                  </span>
-                  <input
-                    value={form.union_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        union_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Union Code"
+                  value={form.union_code}
+                  placeholder="Optional"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      union_code: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Post Code
-                  </span>
-                  <input
-                    value={form.post_code}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        post_code: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: 1212"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Post Code"
+                  value={form.post_code}
+                  placeholder="Example: 1212"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      post_code: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    City
-                  </span>
-                  <input
-                    value={form.city}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        city: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: Dhaka"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="City"
+                  value={form.city}
+                  placeholder="Example: Dhaka"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      city: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    State / Region
-                  </span>
-                  <input
-                    value={form.state_region}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        state_region: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: Dhaka Division"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="State / Region"
+                  value={form.state_region}
+                  placeholder="Example: Dhaka Division"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      state_region: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Country
-                  </span>
-                  <input
-                    value={form.country}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        country: event.target.value,
-                      }))
-                    }
-                    placeholder="Bangladesh"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextField
+                  label="Country"
+                  value={form.country}
+                  placeholder="Bangladesh"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      country: value,
+                    }))
+                  }
+                />
 
-                <label className="space-y-1 md:col-span-2">
-                  <span className="text-sm font-semibold text-slate-700">
-                    Remarks
-                  </span>
-                  <textarea
-                    value={form.remarks}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        remarks: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder="Optional remarks"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                  />
-                </label>
+                <CrudTextAreaField
+                  label="Remarks"
+                  value={form.remarks}
+                  rows={3}
+                  placeholder="Optional remarks"
+                  className="md:col-span-2"
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      remarks: value,
+                    }))
+                  }
+                />
               </div>
 
               {errorMessage ? (
@@ -1110,33 +987,8 @@ export default function AuditEntityAddressesPage() {
                   {errorMessage}
                 </div>
               ) : null}
-
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
-                <button
-                  type="button"
-                  onClick={closeDrawer}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSaving || isReadOnly}
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
-                  Save
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
+        </form>
+      </CrudDrawer>
 
       {confirmTarget && confirmAction ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4 backdrop-blur-sm">
