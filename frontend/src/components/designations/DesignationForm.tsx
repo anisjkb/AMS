@@ -4,6 +4,9 @@
 
 import { FormEvent, useMemo, useState } from "react";
 
+import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
 import { createDesignation, updateDesignation } from "@/services/designation";
 import type { Branch } from "@/types/branch";
 import type { Company } from "@/types/company";
@@ -20,6 +23,9 @@ type DesignationFormProps = {
   departments: Department[];
   onSuccess: () => void;
   onCancel: () => void;
+  formId?: string;
+  hideFooter?: boolean;
+  onSubmittingChange?: (isSubmitting: boolean) => void;
 };
 
 type DesignationFormState = {
@@ -55,11 +61,6 @@ const optionalText = (value: string) => {
   return trimmed || undefined;
 };
 
-const inputClass =
-  "w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-blue-500";
-
-const labelClass = "mb-2 block text-sm font-bold text-slate-700";
-
 export default function DesignationForm({
   initialData,
   companies,
@@ -67,6 +68,9 @@ export default function DesignationForm({
   departments,
   onSuccess,
   onCancel,
+  formId = "designation-form",
+  hideFooter = false,
+  onSubmittingChange,
 }: DesignationFormProps) {
   const [form, setForm] = useState<DesignationFormState>(() =>
     getInitialForm(initialData)
@@ -141,6 +145,11 @@ export default function DesignationForm({
     remarks: optionalText(form.remarks),
   });
 
+  const setSubmitState = (isSubmitting: boolean) => {
+    setSubmitting(isSubmitting);
+    onSubmittingChange?.(isSubmitting);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -171,7 +180,7 @@ export default function DesignationForm({
     }
 
     try {
-      setSubmitting(true);
+      setSubmitState(true);
 
       const payload = buildPayload();
 
@@ -181,6 +190,7 @@ export default function DesignationForm({
         await createDesignation(payload);
       }
 
+      setSubmitState(false);
       onSuccess();
     } catch (submitError) {
       console.error("Designation save failed:", submitError);
@@ -191,147 +201,134 @@ export default function DesignationForm({
           : "Failed to save designation."
       );
     } finally {
-      setSubmitting(false);
+      setSubmitState(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-5">
+      {error ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
           {error}
         </div>
-      )}
+      ) : null}
 
-      <div>
-        <label className={labelClass}>Company *</label>
-        <select
+      <div className="grid gap-4 md:grid-cols-3">
+        <CrudSelectField
+          label="Company"
           value={form.company_id}
-          onChange={(event) => handleCompanyChange(event.target.value)}
-          className={inputClass}
-        >
-          <option value="">Select company</option>
-          {activeCompanies.map((company) => (
-            <option key={company.id} value={company.id}>
-              {company.company_name}
-            </option>
-          ))}
-        </select>
-      </div>
+          required
+          disabled={submitting}
+          options={[
+            { value: "", label: "Select company" },
+            ...activeCompanies.map((company) => ({
+              value: String(company.id),
+              label: company.company_name,
+            })),
+          ]}
+          onChange={handleCompanyChange}
+        />
 
-      <div>
-        <label className={labelClass}>Branch *</label>
-        <select
+        <CrudSelectField
+          label="Branch"
           value={form.branch_id}
-          onChange={(event) => handleBranchChange(event.target.value)}
-          disabled={!form.company_id}
-          className={inputClass}
-        >
-          <option value="">
-            {form.company_id ? "Select branch" : "Select company first"}
-          </option>
+          required
+          disabled={submitting || !form.company_id}
+          options={[
+            {
+              value: "",
+              label: form.company_id ? "Select branch" : "Select company first",
+            },
+            ...availableBranches.map((branch) => ({
+              value: String(branch.id),
+              label: branch.branch_name,
+            })),
+          ]}
+          onChange={handleBranchChange}
+        />
 
-          {availableBranches.map((branch) => (
-            <option key={branch.id} value={branch.id}>
-              {branch.branch_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Department *</label>
-        <select
+        <CrudSelectField
+          label="Department"
           value={form.department_id}
-          onChange={(event) =>
-            handleChange("department_id", event.target.value)
-          }
-          disabled={!form.branch_id}
-          className={inputClass}
-        >
-          <option value="">
-            {form.branch_id ? "Select department" : "Select branch first"}
-          </option>
-
-          {availableDepartments.map((department) => (
-            <option key={department.id} value={department.id}>
-              {department.department_name}
-            </option>
-          ))}
-        </select>
+          required
+          disabled={submitting || !form.branch_id}
+          options={[
+            {
+              value: "",
+              label: form.branch_id
+                ? "Select department"
+                : "Select branch first",
+            },
+            ...availableDepartments.map((department) => ({
+              value: String(department.id),
+              label: department.department_name,
+            })),
+          ]}
+          onChange={(value) => handleChange("department_id", value)}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className={labelClass}>Designation Name *</label>
-          <input
-            value={form.designation_name}
-            onChange={(event) =>
-              handleChange("designation_name", event.target.value)
-            }
-            placeholder="Example: Manager"
-            className={inputClass}
-          />
-        </div>
+        <CrudTextField
+          label="Designation Name"
+          value={form.designation_name}
+          required
+          disabled={submitting}
+          placeholder="Example: Manager"
+          onChange={(value) => handleChange("designation_name", value)}
+        />
 
-        <div>
-          <label className={labelClass}>Designation Code *</label>
-          <input
-            value={form.designation_code}
-            onChange={(event) =>
-              handleChange("designation_code", event.target.value)
-            }
-            placeholder="Example: MGR"
-            className={inputClass}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className={labelClass}>Short Name</label>
-        <input
-          value={form.designation_short_name}
-          onChange={(event) =>
-            handleChange("designation_short_name", event.target.value)
-          }
+        <CrudTextField
+          label="Designation Code"
+          value={form.designation_code}
+          required
+          disabled={submitting}
           placeholder="Example: MGR"
-          className={inputClass}
+          onChange={(value) => handleChange("designation_code", value)}
         />
       </div>
 
-      <div>
-        <label className={labelClass}>Remarks</label>
-        <textarea
-          value={form.remarks}
-          onChange={(event) => handleChange("remarks", event.target.value)}
-          placeholder="Optional remarks"
-          rows={3}
-          className={inputClass}
-        />
-      </div>
+      <CrudTextField
+        label="Short Name"
+        value={form.designation_short_name}
+        disabled={submitting}
+        placeholder="Example: MGR"
+        onChange={(value) => handleChange("designation_short_name", value)}
+      />
 
-      <div className="flex justify-end gap-3 pt-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={submitting}
-          className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-        >
-          Cancel
-        </button>
+      <CrudTextAreaField
+        label="Remarks"
+        value={form.remarks}
+        disabled={submitting}
+        placeholder="Optional remarks"
+        rows={3}
+        onChange={(value) => handleChange("remarks", value)}
+      />
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
-        >
-          {submitting
-            ? "Saving..."
-            : initialData
-              ? "Update Designation"
-              : "Save Designation"}
-        </button>
-      </div>
+      {!hideFooter ? (
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 disabled:opacity-60"
+          >
+            {submitting
+              ? "Saving..."
+              : initialData
+                ? "Update Designation"
+                : "Save Designation"}
+          </button>
+        </div>
+      ) : null}
     </form>
   );
 }
