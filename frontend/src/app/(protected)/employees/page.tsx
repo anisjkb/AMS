@@ -3,14 +3,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Users } from "lucide-react";
+import { Download, Plus, Upload, Users } from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
-import DataTablePagination from "@/components/common/DataTablePagination";
-import DataTableToolbar from "@/components/common/DataTableToolbar";
-import ModuleHero from "@/components/common/ModuleHero";
-import PageActionBar from "@/components/common/PageActionBar";
-import RightDrawer from "@/components/common/RightDrawer";
+import CrudPagination from "@/components/crud/CrudPagination";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import EmployeeForm from "@/components/employees/EmployeeForm";
 import EmployeeRowActions from "@/components/employees/EmployeeRowActions";
 
@@ -31,7 +33,7 @@ import type { Company } from "@/types/company";
 import type { Department } from "@/types/department";
 import type { Designation } from "@/types/designation";
 import type { Employee } from "@/types/employee";
-import type { PageSizeOption, StatusFilter } from "@/types/pagination";
+import type { StatusFilter } from "@/types/pagination";
 
 type ConfirmAction = "inactive" | "restore" | "permanent_delete";
 type ConfirmVariant = "danger" | "warning" | "success";
@@ -56,7 +58,7 @@ function EmployeesContent() {
   const [lookupEmployees, setLookupEmployees] = useState<Employee[]>([]);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] = useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -65,6 +67,7 @@ function EmployeesContent() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [employeeSubmitting, setEmployeeSubmitting] = useState(false);
 
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null
@@ -73,6 +76,8 @@ function EmployeesContent() {
     null
   );
   const [confirmLoading, setConfirmLoading] = useState(false);
+
+  const employeeFormId = "employee-form";
 
   const showSuccess = useCallback((message: string) => {
     setSuccessMessage(message);
@@ -158,7 +163,7 @@ function EmployeesContent() {
               })
             : await getEmployees({
                 page,
-                pageSize,
+                pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
                 search: searchTerm,
                 status: statusFilter,
                 sortBy: "id",
@@ -198,7 +203,7 @@ function EmployeesContent() {
           })
         : getEmployees({
             page,
-            pageSize,
+            pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
             search: searchTerm,
             status: statusFilter,
             sortBy: "id",
@@ -234,7 +239,7 @@ function EmployeesContent() {
     };
   }, [page, pageSize, searchTerm, statusFilter, showError]);
 
-  const handlePageSizeChange = (nextPageSize: PageSizeOption) => {
+  const handlePageSizeChange = (nextPageSize: CrudPageSizeOption) => {
     setPageSize(nextPageSize);
     setPage(1);
   };
@@ -276,6 +281,7 @@ function EmployeesContent() {
   const handleCloseDrawer = () => {
     setDrawerOpen(false);
     setEditingEmployee(null);
+    setEmployeeSubmitting(false);
   };
 
   const handleSuccess = () => {
@@ -379,6 +385,8 @@ function EmployeesContent() {
     return "Confirm";
   };
 
+  const numericPageSize = pageSize === "all" ? 100 : Number(pageSize);
+
   const getConfirmVariant = (): ConfirmVariant => {
     if (confirmAction === "restore") return "success";
     if (confirmAction === "inactive") return "warning";
@@ -389,69 +397,127 @@ function EmployeesContent() {
   return (
     <>
       <div className="space-y-6">
-        <ModuleHero
-          icon={Users}
-          title="Employee Management"
-          description="Manage employees with company, branch, department and designation mapping."
-          height="x-small"
-        />
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="bg-linear-to-r from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-white">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-200">
+                  <Users className="h-4 w-4" />
+                  Organization Foundation
+                </div>
 
-        <PageActionBar
-          menuKey="employee"
-          onCreate={handleCreate}
-          onExport={handleExport}
-          onImport={handleImport}
-        />
+                <h1 className="mt-4 text-2xl font-bold tracking-tight">
+                  Employee Management
+                </h1>
 
-        {successMessage && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-700">
-            {successMessage}
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                  Maintain employee profiles, organization mapping, reporting manager and employment information.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-slate-100"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Employee
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-white/15"
+                >
+                  <Download className="h-4 w-4" />
+                  Export
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-white/15"
+                >
+                  <Upload className="h-4 w-4" />
+                  Import
+                </button>
+              </div>
+            </div>
           </div>
-        )}
 
-        {errorMessage && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">
-            {errorMessage}
-          </div>
-        )}
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5">
-            <h2 className="text-xl font-black text-slate-900">Employees</h2>
-            <p className="text-sm text-slate-500">
-              Employee list connected with backend CRUD API.
-            </p>
-          </div>
-
-          <DataTableToolbar
+          <CrudToolbar
             pageSize={pageSize}
-            searchTerm={searchTerm}
-            statusFilter={statusFilter}
-            searchPlaceholder="Search employee."
-            onPageSizeChange={handlePageSizeChange}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
+            onPageSizeChange={(value) =>
+              handlePageSizeChange(value as CrudPageSizeOption)
+            }
+            onRefresh={() => loadEmployees(true)}
+            onReset={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+              setPage(1);
+            }}
+            filters={[
+              {
+                key: "search",
+                label: "Search",
+                type: "search",
+                value: searchTerm,
+                placeholder: "Search employee.",
+                onChange: handleSearchChange,
+              },
+              {
+                key: "status",
+                label: "Status",
+                type: "select",
+                value: statusFilter,
+                options: [
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ],
+                onChange: (value) => handleStatusChange(value as StatusFilter),
+              },
+            ]}
           />
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-325 w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500">
+          {(successMessage || errorMessage) ? (
+            <div className="border-b border-slate-200 px-6 py-4">
+              {successMessage ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                  {successMessage}
+                </div>
+              ) : null}
+
+              {errorMessage ? (
+                <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                  {errorMessage}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-5 py-4 font-bold">SL</th>
-                  <th className="px-5 py-4 font-bold">Employee</th>
-                  <th className="px-5 py-4 font-bold">Official ID</th>
-                  <th className="px-5 py-4 font-bold">Contact</th>
-                  <th className="px-5 py-4 font-bold">Company</th>
-                  <th className="px-5 py-4 font-bold">Branch</th>
-                  <th className="px-5 py-4 font-bold">Department</th>
-                  <th className="px-5 py-4 font-bold">Designation</th>
-                  <th className="px-5 py-4 font-bold">Employee Status</th>
-                  <th className="px-5 py-4 font-bold">Status</th>
-                  <th className="px-5 py-4 text-right font-bold">Action</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">SL</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Employee</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Official ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Contact</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Company</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Branch</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Department</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Designation</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Employee Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
+                  <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Action</th>
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
                     <td
@@ -474,14 +540,14 @@ function EmployeesContent() {
                   employees.map((employee, index) => (
                     <tr
                       key={employee.id}
-                      className={`border-t border-slate-100 hover:bg-slate-50 ${
+                      className={`hover:bg-slate-50/80 ${
                         !employee.is_active ? "bg-slate-50 opacity-70" : ""
                       }`}
                     >
                       <td className="px-5 py-4 font-semibold text-slate-600">
                         {pageSize === "all"
                           ? index + 1
-                          : (page - 1) * pageSize + index + 1}
+                          : (page - 1) * numericPageSize + index + 1}
                       </td>
 
                       <td className="px-5 py-4">
@@ -560,20 +626,49 @@ function EmployeesContent() {
             </table>
           </div>
 
-          <DataTablePagination
-            page={page}
-            pageSize={pageSize}
-            total={totalRecords}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
+          <div className="border-t border-slate-200 px-6 py-5">
+            <CrudPagination
+              page={page}
+              totalPages={totalPages}
+              total={totalRecords}
+              pageSize={numericPageSize}
+              onPageChange={handlePageChange}
+            />
+          </div>
         </section>
       </div>
 
-      <RightDrawer
-        open={drawerOpen}
+      <CrudDrawer
+        isOpen={drawerOpen}
         title={editingEmployee ? "Edit Employee" : "Create Employee"}
+        description="Create and maintain employee profile, organization mapping, reporting manager and employment information."
+        maxWidthClassName="max-w-5xl"
         onClose={handleCloseDrawer}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={handleCloseDrawer}
+              disabled={employeeSubmitting}
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              form={employeeFormId}
+              disabled={employeeSubmitting}
+              className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {employeeSubmitting
+                ? "Saving..."
+                : editingEmployee
+                  ? "Update Employee"
+                  : "Save Employee"}
+            </button>
+          </>
+        }
       >
         <EmployeeForm
           key={
@@ -589,8 +684,11 @@ function EmployeesContent() {
           employees={lookupEmployees}
           onSuccess={handleSuccess}
           onCancel={handleCloseDrawer}
+          formId={employeeFormId}
+          hideFooter
+          onSubmittingChange={setEmployeeSubmitting}
         />
-      </RightDrawer>
+      </CrudDrawer>
 
       <ConfirmModal
         open={Boolean(confirmAction && selectedEmployee)}

@@ -7,6 +7,10 @@ import Image from "next/image";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { Camera, Trash2, Upload } from "lucide-react";
 
+import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+
 import {
   createEmployee,
   deleteEmployeePhoto,
@@ -34,6 +38,9 @@ type EmployeeFormProps = {
   employees: Employee[];
   onSuccess: () => void;
   onCancel: () => void;
+  formId?: string;
+  hideFooter?: boolean;
+  onSubmittingChange?: (isSubmitting: boolean) => void;
 };
 
 type EmployeeFormState = {
@@ -72,11 +79,6 @@ const employeeTypeOptions = [
 ];
 
 const genderOptions = ["Male", "Female", "Other"];
-
-const inputClass =
-  "w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-blue-500";
-
-const labelClass = "mb-2 block text-sm font-bold text-slate-700";
 
 const optionalText = (value: string) => {
   const trimmed = value.trim();
@@ -128,6 +130,9 @@ export default function EmployeeForm({
   employees,
   onSuccess,
   onCancel,
+  formId = "employee-form",
+  hideFooter = false,
+  onSubmittingChange,
 }: EmployeeFormProps) {
   const [form, setForm] = useState<EmployeeFormState>(() =>
     getInitialForm(initialData)
@@ -312,6 +317,11 @@ useEffect(() => {
     };
   };
 
+  const setSubmitState = (isSubmitting: boolean) => {
+    setSubmitting(isSubmitting);
+    onSubmittingChange?.(isSubmitting);
+  };
+
   const handleDeletePhoto = async () => {
     if (!initialData) return;
 
@@ -320,6 +330,7 @@ useEffect(() => {
       setError("");
 
       await deleteEmployeePhoto(initialData.id);
+      setSubmitState(false);
       onSuccess();
     } catch (deleteError) {
       console.error("Employee photo delete failed:", deleteError);
@@ -369,7 +380,7 @@ useEffect(() => {
     }
 
     try {
-      setSubmitting(true);
+      setSubmitState(true);
 
       const payload = buildPayload();
 
@@ -393,12 +404,12 @@ useEffect(() => {
           : "Failed to save employee."
       );
     } finally {
-      setSubmitting(false);
+      setSubmitState(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-5">
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
           {error}
@@ -455,263 +466,227 @@ useEffect(() => {
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className={labelClass}>Employee Name *</label>
-          <input
-            value={form.employee_name}
-            onChange={(event) =>
-              handleChange("employee_name", event.target.value)
-            }
-            placeholder="Example: Rahim Uddin"
-            className={inputClass}
-          />
-        </div>
+        <CrudTextField
+          label="Employee Name"
+          value={form.employee_name}
+          required
+          disabled={submitting}
+          placeholder="Example: Rahim Uddin"
+          onChange={(value) => handleChange("employee_name", value)}
+        />
 
-        <div>
-          <label className={labelClass}>Employee Code</label>
-          <input
-            value={form.employee_code}
-            onChange={(event) =>
-              handleChange("employee_code", event.target.value)
-            }
-            placeholder="Auto-generated if empty"
-            className={inputClass}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className={labelClass}>Official Employee ID</label>
-          <input
-            value={form.official_employee_id}
-            onChange={(event) =>
-              handleChange("official_employee_id", event.target.value)
-            }
-            placeholder="Example: OFF001"
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>Employee Type *</label>
-          <select
-            value={form.employee_type}
-            onChange={(event) =>
-              handleChange("employee_type", event.target.value)
-            }
-            className={inputClass}
-          >
-            {employeeTypeOptions.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div>
-          <label className={labelClass}>Email</label>
-          <input
-            type="email"
-            value={form.email}
-            onChange={(event) => handleChange("email", event.target.value)}
-            placeholder="employee@example.com"
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>Phone</label>
-          <input
-            value={form.phone}
-            onChange={(event) => handleChange("phone", event.target.value)}
-            placeholder="01712345678"
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>NID</label>
-          <input
-            value={form.nid}
-            onChange={(event) => handleChange("nid", event.target.value)}
-            placeholder="National ID"
-            className={inputClass}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div>
-          <label className={labelClass}>Date of Birth</label>
-          <input
-            type="date"
-            value={form.dob}
-            onChange={(event) => handleChange("dob", event.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>Joining Date</label>
-          <input
-            type="date"
-            value={form.joining_date}
-            onChange={(event) =>
-              handleChange("joining_date", event.target.value)
-            }
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label className={labelClass}>Gender</label>
-          <select
-            value={form.gender}
-            onChange={(event) => handleChange("gender", event.target.value)}
-            className={inputClass}
-          >
-            <option value="">Select gender</option>
-            {genderOptions.map((gender) => (
-              <option key={gender} value={gender}>
-                {gender}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className={labelClass}>Company *</label>
-        <select
-          value={form.company_id}
-          onChange={(event) => handleCompanyChange(event.target.value)}
-          className={inputClass}
-        >
-          <option value="">Select company</option>
-          {activeCompanies.map((company) => (
-            <option key={company.id} value={company.id}>
-              {company.company_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Branch *</label>
-        <select
-          value={form.branch_id}
-          onChange={(event) => handleBranchChange(event.target.value)}
-          disabled={!form.company_id}
-          className={inputClass}
-        >
-          <option value="">
-            {form.company_id ? "Select branch" : "Select company first"}
-          </option>
-          {availableBranches.map((branch) => (
-            <option key={branch.id} value={branch.id}>
-              {branch.branch_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Department *</label>
-        <select
-          value={form.department_id}
-          onChange={(event) => handleDepartmentChange(event.target.value)}
-          disabled={!form.branch_id}
-          className={inputClass}
-        >
-          <option value="">
-            {form.branch_id ? "Select department" : "Select branch first"}
-          </option>
-          {availableDepartments.map((department) => (
-            <option key={department.id} value={department.id}>
-              {department.department_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Designation *</label>
-        <select
-          value={form.designation_id}
-          onChange={(event) =>
-            handleChange("designation_id", event.target.value)
-          }
-          disabled={!form.department_id}
-          className={inputClass}
-        >
-          <option value="">
-            {form.department_id
-              ? "Select designation"
-              : "Select department first"}
-          </option>
-          {availableDesignations.map((designation) => (
-            <option key={designation.id} value={designation.id}>
-              {designation.designation_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Reporting To</label>
-        <select
-          value={form.reporting_to_employee_id}
-          onChange={(event) =>
-            handleChange("reporting_to_employee_id", event.target.value)
-          }
-          className={inputClass}
-        >
-          <option value="">No reporting manager</option>
-          {reportingEmployees.map((employee) => (
-            <option key={employee.id} value={employee.id}>
-              {employee.employee_name} ({employee.employee_code})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={labelClass}>Remarks</label>
-        <textarea
-          value={form.remarks}
-          onChange={(event) => handleChange("remarks", event.target.value)}
-          placeholder="Optional remarks"
-          rows={3}
-          className={inputClass}
+        <CrudTextField
+          label="Employee Code"
+          value={form.employee_code}
+          disabled={submitting}
+          placeholder="Auto-generated if empty"
+          onChange={(value) => handleChange("employee_code", value)}
         />
       </div>
 
-      <div className="flex justify-end gap-3 pt-2">
-        <button
-          type="button"
-          onClick={onCancel}
+      <div className="grid gap-4 md:grid-cols-2">
+        <CrudTextField
+          label="Official Employee ID"
+          value={form.official_employee_id}
           disabled={submitting}
-          className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-        >
-          Cancel
-        </button>
+          placeholder="Example: OFF001"
+          onChange={(value) => handleChange("official_employee_id", value)}
+        />
 
-        <button
-          type="submit"
+        <CrudSelectField
+          label="Employee Type"
+          value={form.employee_type}
+          required
           disabled={submitting}
-          className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
-        >
-          {submitting
-            ? "Saving..."
-            : initialData
-              ? "Update Employee"
-              : "Save Employee"}
-        </button>
+          options={employeeTypeOptions.map((type) => ({
+            value: type,
+            label: type,
+          }))}
+          onChange={(value) => handleChange("employee_type", value)}
+        />
       </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <CrudTextField
+          label="Email"
+          type="email"
+          value={form.email}
+          disabled={submitting}
+          placeholder="employee@example.com"
+          onChange={(value) => handleChange("email", value)}
+        />
+
+        <CrudTextField
+          label="Phone"
+          type="tel"
+          value={form.phone}
+          disabled={submitting}
+          placeholder="01712345678"
+          onChange={(value) => handleChange("phone", value)}
+          onBlur={() => handleChange("phone", normalizeBangladeshPhone(form.phone))}
+        />
+
+        <CrudTextField
+          label="NID"
+          value={form.nid}
+          disabled={submitting}
+          placeholder="National ID"
+          onChange={(value) => handleChange("nid", value)}
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <CrudTextField
+          label="Date of Birth"
+          type="date"
+          value={form.dob}
+          disabled={submitting}
+          onChange={(value) => handleChange("dob", value)}
+        />
+
+        <CrudTextField
+          label="Joining Date"
+          type="date"
+          value={form.joining_date}
+          disabled={submitting}
+          onChange={(value) => handleChange("joining_date", value)}
+        />
+
+        <CrudSelectField
+          label="Gender"
+          value={form.gender}
+          disabled={submitting}
+          options={[
+            { value: "", label: "Select gender" },
+            ...genderOptions.map((gender) => ({
+              value: gender,
+              label: gender,
+            })),
+          ]}
+          onChange={(value) => handleChange("gender", value)}
+        />
+      </div>
+
+      <CrudSelectField
+        label="Company"
+        value={form.company_id}
+        required
+        disabled={submitting}
+        options={[
+          { value: "", label: "Select company" },
+          ...activeCompanies.map((company) => ({
+            value: String(company.id),
+            label: company.company_name,
+          })),
+        ]}
+        onChange={handleCompanyChange}
+      />
+
+      <CrudSelectField
+        label="Branch"
+        value={form.branch_id}
+        required
+        disabled={submitting || !form.company_id}
+        options={[
+          {
+            value: "",
+            label: form.company_id ? "Select branch" : "Select company first",
+          },
+          ...availableBranches.map((branch) => ({
+            value: String(branch.id),
+            label: branch.branch_name,
+          })),
+        ]}
+        onChange={handleBranchChange}
+      />
+
+      <CrudSelectField
+        label="Department"
+        value={form.department_id}
+        required
+        disabled={submitting || !form.branch_id}
+        options={[
+          {
+            value: "",
+            label: form.branch_id ? "Select department" : "Select branch first",
+          },
+          ...availableDepartments.map((department) => ({
+            value: String(department.id),
+            label: department.department_name,
+          })),
+        ]}
+        onChange={handleDepartmentChange}
+      />
+
+      <CrudSelectField
+        label="Designation"
+        value={form.designation_id}
+        required
+        disabled={submitting || !form.department_id}
+        options={[
+          {
+            value: "",
+            label: form.department_id
+              ? "Select designation"
+              : "Select department first",
+          },
+          ...availableDesignations.map((designation) => ({
+            value: String(designation.id),
+            label: designation.designation_name,
+          })),
+        ]}
+        onChange={(value) => handleChange("designation_id", value)}
+      />
+
+      <CrudSelectField
+        label="Reporting To"
+        value={form.reporting_to_employee_id}
+        disabled={submitting}
+        options={[
+          { value: "", label: "No reporting manager" },
+          ...reportingEmployees.map((employee) => ({
+            value: String(employee.id),
+            label: `${employee.employee_name}${
+              employee.employee_code ? ` (${employee.employee_code})` : ""
+            }`,
+          })),
+        ]}
+        onChange={(value) => handleChange("reporting_to_employee_id", value)}
+      />
+
+      <CrudTextAreaField
+        label="Remarks"
+        value={form.remarks}
+        disabled={submitting}
+        placeholder="Optional remarks"
+        rows={3}
+        onChange={(value) => handleChange("remarks", value)}
+      />
+
+      {!hideFooter ? (
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {submitting
+              ? "Saving..."
+              : initialData
+                ? "Update Employee"
+                : "Save Employee"}
+          </button>
+        </div>
+      ) : null}
     </form>
   );
 }
