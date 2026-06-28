@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   EyeOff,
@@ -8,14 +8,23 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  Search,
   ShieldCheck,
   Trash2,
-  X,
 } from "lucide-react";
 
 import { useModuleActions } from "@/hooks/useModuleActions";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import CrudPagination from "@/components/crud/CrudPagination";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
+import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+import CrudCheckboxField from "@/components/crud/fields/CrudCheckboxField";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import {
   createAuditSubject,
   deactivateAuditSubject,
@@ -30,9 +39,12 @@ import {
 } from "@/services/auditSubject";
 
 type StatusFilter = "all" | "active" | "inactive";
-type PageSizeOption = 10 | 20 | 30 | 40 | 50 | 100 | "all";
 type DrawerMode = "create" | "edit";
 type ConfirmAction = "delete" | "restore" | "permanent_delete";
+type PageMessage = {
+  type: "success" | "error";
+  text: string;
+};
 
 type FormState = {
   subject_code: string;
@@ -63,8 +75,6 @@ const riskLevels: { value: RiskLevel; label: string }[] = [
   { value: "high", label: "High" },
   { value: "critical", label: "Critical" },
 ];
-
-const pageSizeOptions: PageSizeOption[] = [10, 20, 30, 40, 50, 100, "all"];
 
 const emptyForm: FormState = {
   subject_code: "",
@@ -138,14 +148,14 @@ export default function AuditSubjectsPage() {
   const [total, setTotal] = useState(0);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(20);
+  const [pageSize, setPageSize] = useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [subjectTypeFilter, setSubjectTypeFilter] = useState("all");
 
   const [isLoading, setIsLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<PageMessage | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
@@ -163,7 +173,7 @@ export default function AuditSubjectsPage() {
 
   const debouncedSearch = useDebouncedValue(search, 400);
 
-  const numericPageSize = pageSize === "all" ? 100 : pageSize;
+  const numericPageSize = pageSize === "all" ? 100 : Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(total / numericPageSize));
 
   const showTopActions =
@@ -208,7 +218,7 @@ export default function AuditSubjectsPage() {
           ? error.message
           : "Failed to load audit subjects.";
 
-      setMessage(errorMessage);
+      setMessage({ type: "error", text: errorMessage });
       setItems([]);
       setTotal(0);
     } finally {
@@ -273,11 +283,11 @@ useEffect(() => {
     setConfirmAction(null);
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!form.subject_name.trim()) {
-      setMessage("Subject name is required.");
+      setMessage({ type: "error", text: "Subject name is required." });
       return;
     }
 
@@ -285,27 +295,28 @@ useEffect(() => {
     setMessage(null);
 
     try {
-      const payload = buildPayload(form);
+      const successText =
+        drawerMode === "create"
+          ? "Audit subject created successfully."
+          : "Audit subject updated successfully.";
 
-      if (drawerMode === "edit" && selectedSubject) {
-        await updateAuditSubject(selectedSubject.id, payload);
-        setMessage("Audit subject updated successfully.");
-      } else {
-        await createAuditSubject(payload);
-        setMessage("Audit subject created successfully.");
+      if (drawerMode === "create") {
+        await createAuditSubject(buildPayload(form));
+      } else if (selectedSubject) {
+        await updateAuditSubject(selectedSubject.id, buildPayload(form));
       }
 
       setDrawerOpen(false);
       setSelectedSubject(null);
       setForm(emptyForm);
+
       await loadAuditSubjects();
+
+      setMessage({ type: "success", text: successText });
     } catch (error) {
       const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to save audit subject.";
-
-      setMessage(errorMessage);
+        error instanceof Error ? error.message : "Audit subject request failed.";
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setSubmitLoading(false);
     }
@@ -320,17 +331,17 @@ useEffect(() => {
     try {
       if (confirmAction === "delete") {
         await deactivateAuditSubject(confirmSubject.id);
-        setMessage("Audit subject deactivated successfully.");
+        setMessage({ type: "success", text: "Audit subject deactivated successfully." });
       }
 
       if (confirmAction === "restore") {
         await restoreAuditSubject(confirmSubject.id);
-        setMessage("Audit subject restored successfully.");
+        setMessage({ type: "success", text: "Audit subject restored successfully." });
       }
 
       if (confirmAction === "permanent_delete") {
         await permanentDeleteAuditSubject(confirmSubject.id);
-        setMessage("Audit subject permanently deleted successfully.");
+        setMessage({ type: "success", text: "Audit subject permanently deleted successfully." });
       }
 
       closeConfirm();
@@ -341,14 +352,12 @@ useEffect(() => {
           ? error.message
           : "Action failed.";
 
-      setMessage(errorMessage);
+      setMessage({ type: "error", text: errorMessage });
     } finally {
       setSubmitLoading(false);
     }
   };
 
-  const showingFrom = total === 0 ? 0 : (page - 1) * numericPageSize + 1;
-  const showingTo = Math.min(page * numericPageSize, total);
 
   return (
     <div className="space-y-6">
@@ -394,89 +403,76 @@ useEffect(() => {
           </div>
         </div>
 
-        <div className="grid gap-4 border-b border-slate-100 p-5 lg:grid-cols-[160px_1fr_190px_190px]">
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Show
-            </label>
-            <select
-              value={String(pageSize)}
-              onChange={(event) => {
-                const value = event.target.value;
-                setPageSize(value === "all" ? "all" : Number(value) as PageSizeOption);
+        <CrudToolbar
+          pageSize={pageSize}
+          onPageSizeChange={(value) => {
+            setPageSize(value as CrudPageSizeOption);
+            resetToFirstPage();
+          }}
+          onRefresh={loadAuditSubjects}
+          onReset={() => {
+            setSearch("");
+            setSubjectTypeFilter("all");
+            setStatusFilter("all");
+            setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+            resetToFirstPage();
+          }}
+          filters={[
+            {
+              key: "search",
+              label: "Search",
+              type: "search",
+              value: search,
+              placeholder: "Search code, name, reference, department...",
+              onChange: (value) => {
+                setSearch(value);
                 resetToFirstPage();
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"
-            >
-              {pageSizeOptions.map((option) => (
-                <option key={String(option)} value={String(option)}>
-                  {option === "all" ? "All" : option}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Search
-            </label>
-            <div className="flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2.5">
-              <Search size={18} className="text-slate-400" />
-              <input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  resetToFirstPage();
-                }}
-                placeholder="Search code, name, reference, department..."
-                className="ml-2 w-full bg-transparent text-sm outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Type
-            </label>
-            <select
-              value={subjectTypeFilter}
-              onChange={(event) => {
-                setSubjectTypeFilter(event.target.value);
+              },
+            },
+            {
+              key: "type",
+              label: "Type",
+              type: "select",
+              value: subjectTypeFilter,
+              options: [
+                { value: "all", label: "All Types" },
+                ...subjectTypes.map((type) => ({
+                  value: type.value,
+                  label: type.label,
+                })),
+              ],
+              onChange: (value) => {
+                setSubjectTypeFilter(value);
                 resetToFirstPage();
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"
-            >
-              <option value="all">All Types</option>
-              {subjectTypes.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-black uppercase text-slate-400">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value as StatusFilter);
+              },
+            },
+            {
+              key: "status",
+              label: "Status",
+              type: "select",
+              value: statusFilter,
+              options: [
+                { value: "all", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ],
+              onChange: (value) => {
+                setStatusFilter(value as StatusFilter);
                 resetToFirstPage();
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-        </div>
+              },
+            },
+          ]}
+        />
 
-        {message ? (
-          <div className="border-b border-amber-100 bg-amber-50 px-5 py-3 text-sm font-bold text-amber-700">
-            {message}
+        {message && !drawerOpen ? (
+          <div
+            className={`border-b px-5 py-3 text-sm font-bold ${
+              message.type === "success"
+                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                : "border-rose-100 bg-rose-50 text-rose-700"
+            }`}
+          >
+            {message.text}
           </div>
         ) : null}
 
@@ -636,281 +632,201 @@ useEffect(() => {
           </table>
         </div>
 
-        <div className="flex flex-col justify-between gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 md:flex-row md:items-center">
-          <p>
-            Showing{" "}
-            <span className="font-black text-slate-700">{showingFrom}</span> to{" "}
-            <span className="font-black text-slate-700">{showingTo}</span> of{" "}
-            <span className="font-black text-slate-700">{total}</span> records
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage(1)}
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              First
-            </button>
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="rounded-lg bg-slate-900 px-3 py-2 font-black text-white">
-              {page} / {totalPages}
-            </span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() =>
-                setPage((current) => Math.min(totalPages, current + 1))
-              }
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage(totalPages)}
-              className="rounded-lg border border-slate-200 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Last
-            </button>
-          </div>
-        </div>
+        <CrudPagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={numericPageSize}
+          onPageChange={setPage}
+        />
       </section>
 
-      {drawerOpen ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm">
-          <div className="h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-blue-600">
-                  {drawerMode === "create" ? "Create" : "Edit"}
-                </p>
-                <h2 className="text-xl font-black text-slate-900">
-                  Audit Subject
-                </h2>
-              </div>
-              <button
-                onClick={closeDrawer}
-                className="rounded-xl border border-slate-200 p-2 transition hover:bg-slate-50"
-              >
-                <X size={20} />
-              </button>
-            </div>
+      <CrudDrawer
+        isOpen={drawerOpen}
+        onClose={closeDrawer}
+        title="Audit Subject"
+        description={drawerMode === "create" ? "Create" : "Edit"}
+        maxWidthClassName="max-w-xl"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeDrawer}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
 
-            <form onSubmit={handleSubmit} className="space-y-5 p-6">
-              <div>
-                <label className="mb-1 block text-sm font-black text-slate-700">
-                  Subject Code
-                </label>
-                <input
-                  value={form.subject_code}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      subject_code: event.target.value,
-                    }))
-                  }
-                  placeholder="Auto generated if blank"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
+            <button
+              type="submit"
+              form="audit-subject-form"
+              disabled={submitLoading}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-4 w-4" />
+              )}
+              {drawerMode === "create" ? "Create" : "Update"}
+            </button>
+          </>
+        }
+      >
+        <form
+          id="audit-subject-form"
+          onSubmit={handleSubmit}
+          className="space-y-5"
+        >
+          <label className="space-y-1">
+            <span className="text-sm font-semibold text-slate-700">
+              Subject Code
+            </span>
+            <input
+              value={drawerMode === "create" ? "" : form.subject_code}
+              readOnly
+              disabled
+              placeholder={
+                drawerMode === "create"
+                  ? "Auto generated by system"
+                  : "System generated"
+              }
+              className="w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 outline-none"
+            />
+            <p className="text-xs font-medium text-slate-500">
+              Maintained by system to keep subject codes unique and consistent.
+            </p>
+          </label>
 
-              <div>
-                <label className="mb-1 block text-sm font-black text-slate-700">
-                  Subject Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  required
-                  value={form.subject_name}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      subject_name: event.target.value,
-                    }))
-                  }
-                  placeholder="Example: Cash Shortage at Branch-05"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
+          <CrudTextField
+            label="Subject Name"
+            value={form.subject_name}
+            required
+            placeholder="Example: Cash Shortage at Branch-05"
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                subject_name: value,
+              }))
+            }
+          />
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-black text-slate-700">
-                    Subject Type
-                  </label>
-                  <select
-                    value={form.subject_type}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        subject_type: event.target.value as AuditSubjectType,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                  >
-                    {subjectTypes.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <CrudSelectField
+              label="Subject Type"
+              value={form.subject_type}
+              options={subjectTypes.map((type) => ({
+                value: type.value,
+                label: type.label,
+              }))}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  subject_type: value as AuditSubjectType,
+                }))
+              }
+            />
 
-                <div>
-                  <label className="mb-1 block text-sm font-black text-slate-700">
-                    Risk Level
-                  </label>
-                  <select
-                    value={form.risk_level}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        risk_level: event.target.value as "" | RiskLevel,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                  >
-                    <option value="">Not Selected</option>
-                    {riskLevels.map((risk) => (
-                      <option key={risk.value} value={risk.value}>
-                        {risk.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-black text-slate-700">
-                  Reference Code
-                </label>
-                <input
-                  value={form.reference_code}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      reference_code: event.target.value,
-                    }))
-                  }
-                  placeholder="Example: INC-2026-001"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-black text-slate-700">
-                    Owner Department
-                  </label>
-                  <input
-                    value={form.owner_department}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        owner_department: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: Finance"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-black text-slate-700">
-                    Location
-                  </label>
-                  <input
-                    value={form.location}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        location: event.target.value,
-                      }))
-                    }
-                    placeholder="Example: Dhaka Branch"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                  />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm font-bold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.is_confidential}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      is_confidential: event.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4"
-                />
-                Confidential subject
-              </label>
-
-              <div>
-                <label className="mb-1 block text-sm font-black text-slate-700">
-                  Description
-                </label>
-                <textarea
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-black text-slate-700">
-                  Remarks
-                </label>
-                <textarea
-                  value={form.remarks}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      remarks: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
-                <button
-                  type="button"
-                  onClick={closeDrawer}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitLoading}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitLoading ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : null}
-                  {drawerMode === "create" ? "Create" : "Update"}
-                </button>
-              </div>
-            </form>
+            <CrudSelectField
+              label="Risk Level"
+              value={form.risk_level}
+              options={[
+                { value: "", label: "Not Selected" },
+                ...riskLevels.map((risk) => ({
+                  value: risk.value,
+                  label: risk.label,
+                })),
+              ]}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  risk_level: value as "" | RiskLevel,
+                }))
+              }
+            />
           </div>
-        </div>
-      ) : null}
 
+          <CrudTextField
+            label="Reference Code"
+            value={form.reference_code}
+            placeholder="Example: INC-2026-001"
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                reference_code: value,
+              }))
+            }
+          />
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <CrudTextField
+              label="Owner Department"
+              value={form.owner_department}
+              placeholder="Example: Finance"
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  owner_department: value,
+                }))
+              }
+            />
+
+            <CrudTextField
+              label="Location"
+              value={form.location}
+              placeholder="Example: Dhaka Branch"
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  location: value,
+                }))
+              }
+            />
+          </div>
+
+          <CrudCheckboxField
+            label="Confidential subject"
+            checked={form.is_confidential}
+            onChange={(checked) =>
+              setForm((current) => ({
+                ...current,
+                is_confidential: checked,
+              }))
+            }
+          />
+
+          <CrudTextAreaField
+            label="Description"
+            value={form.description}
+            rows={3}
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                description: value,
+              }))
+            }
+          />
+
+          <CrudTextAreaField
+            label="Remarks"
+            value={form.remarks}
+            rows={3}
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                remarks: value,
+              }))
+            }
+          />
+
+          {message && drawerOpen && message.type === "error" ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+              {message.text}
+            </div>
+          ) : null}
+
+        </form>
+      </CrudDrawer>
       {confirmSubject && confirmAction ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
