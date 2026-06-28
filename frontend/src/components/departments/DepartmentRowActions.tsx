@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Archive, Edit3, RotateCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, RotateCcw, Trash2 } from "lucide-react";
 
 import type { Department } from "@/types/department";
 
@@ -26,39 +26,39 @@ export default function DepartmentRowActions({
       <button
         type="button"
         onClick={() => onEdit(department)}
-        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+        className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+        title="Edit"
       >
-        <Edit3 size={14} />
-        Edit
+        <Pencil className="h-4 w-4" />
       </button>
 
       {department.is_active ? (
         <button
           type="button"
           onClick={() => onInactive(department)}
-          className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-100"
+          className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+          title="Inactive"
         >
-          <Archive size={14} />
-          Inactive
+          <Trash2 className="h-4 w-4" />
         </button>
       ) : (
         <>
           <button
             type="button"
             onClick={() => onRestore(department)}
-            className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+            className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+            title="Restore"
           >
-            <RotateCcw size={14} />
-            Restore
+            <RotateCcw className="h-4 w-4" />
           </button>
 
           <button
             type="button"
             onClick={() => onPermanentDelete(department)}
-            className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+            className="rounded-xl border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50"
+            title="Permanent delete"
           >
-            <Trash2 size={14} />
-            Permanent Delete
+            <AlertTriangle className="h-4 w-4" />
           </button>
         </>
       )}
