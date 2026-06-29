@@ -10,13 +10,17 @@ export type NavigationAction = {
 
 export type NavigationMenu = {
   id: number;
+  parent_menu_id: number | null;
   menu_key: string;
   menu_title: string;
   route_path: string | null;
   icon: string | null;
   permission_key: string | null;
   sort_order: number;
+  menu_level: number;
+  is_expandable: boolean;
   actions: NavigationAction[];
+  children: NavigationMenu[];
 };
 
 export type NavigationGroup = {

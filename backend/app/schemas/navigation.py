@@ -1,4 +1,6 @@
-from pydantic import BaseModel
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
 
 
 class NavigationActionResponse(BaseModel):
@@ -13,13 +15,17 @@ class NavigationActionResponse(BaseModel):
 
 class NavigationMenuResponse(BaseModel):
     id: int
+    parent_menu_id: int | None = None
     menu_key: str
     menu_title: str
     route_path: str | None = None
     icon: str | None = None
     permission_key: str | None = None
     sort_order: int
-    actions: list[NavigationActionResponse] = []
+    menu_level: int = 1
+    is_expandable: bool = False
+    actions: list[NavigationActionResponse] = Field(default_factory=list)
+    children: list["NavigationMenuResponse"] = Field(default_factory=list)
 
 
 class NavigationGroupResponse(BaseModel):
@@ -30,4 +36,7 @@ class NavigationGroupResponse(BaseModel):
     group_badge: str | None = None
     group_color: str | None = None
     sort_order: int
-    menus: list[NavigationMenuResponse] = []
+    menus: list[NavigationMenuResponse] = Field(default_factory=list)
+
+
+NavigationMenuResponse.model_rebuild()

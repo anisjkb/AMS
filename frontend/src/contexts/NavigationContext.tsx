@@ -101,6 +101,19 @@ const fetchNavigationOnce = (forceRefresh = false) => {
   return navigationRequestPromise;
 };
 
+const flattenMenus = (menus: NavigationMenu[]): NavigationMenu[] => {
+  return menus.flatMap((menu) => [
+    menu,
+    ...flattenMenus(menu.children ?? []),
+  ]);
+};
+
+const flattenNavigationMenus = (
+  navigation: NavigationGroup[]
+): NavigationMenu[] => {
+  return navigation.flatMap((group) => flattenMenus(group.menus));
+};
+
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const [navigation, setNavigation] = useState<NavigationGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,7 +171,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<NavigationContextValue>(() => {
-    const allMenus = navigation.flatMap((group) => group.menus);
+    const allMenus = flattenNavigationMenus(navigation);
 
     const getMenuByKey = (menuKey: string) => {
       return allMenus.find((menu) => menu.menu_key === menuKey);
