@@ -2,8 +2,17 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Menu as MenuIcon, Plus, Upload } from "lucide-react";
+import { createElement, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Download,
+  Eye,
+  EyeOff,
+  Layers3,
+  Menu as MenuIcon,
+  Plus,
+  Sparkles,
+  Upload,
+} from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
 import CrudDrawer from "@/components/crud/CrudDrawer";
@@ -14,8 +23,12 @@ import {
   DEFAULT_CRUD_PAGE_SIZE,
   type CrudPageSizeOption,
 } from "@/components/crud/crudConstants";
+import { getIcon } from "@/components/layout/IconMapper";
 import MenuForm from "@/components/menus/MenuForm";
 import MenuRowActions from "@/components/menus/MenuRowActions";
+import NavigationGroupForm from "@/components/menus/NavigationGroupForm";
+import NavigationGroupRowActions from "@/components/menus/NavigationGroupRowActions";
+import { clearNavigationCache, useNavigation } from "@/contexts/NavigationContext";
 import {
   deactivateMenu,
   getAllMenus,
@@ -24,52 +37,149 @@ import {
   permanentlyDeleteMenu,
   restoreMenu,
 } from "@/services/menu";
-import { getAllNavigationGroups } from "@/services/navigationGroup";
+import {
+  deactivateNavigationGroup,
+  getAllNavigationGroups,
+  getNavigationGroupsPage,
+  permanentlyDeleteNavigationGroup,
+  restoreNavigationGroup,
+} from "@/services/navigationGroup";
 import type { Menu, MenuVisibilityFilter } from "@/types/menu";
-import type { NavigationGroupRecord } from "@/types/navigationGroup";
+import type {
+  NavigationGroupRecord,
+  NavigationGroupVisibilityFilter,
+} from "@/types/navigationGroup";
 import type { StatusFilter } from "@/types/pagination";
 
+type BuilderTab = "groups" | "menus";
 type ConfirmAction = "inactive" | "restore" | "permanent_delete";
 type ConfirmVariant = "danger" | "warning" | "success";
+type ConfirmState =
+  | {
+      target: "group";
+      action: ConfirmAction;
+      item: NavigationGroupRecord;
+    }
+  | {
+      target: "menu";
+      action: ConfirmAction;
+      item: Menu;
+    }
+  | null;
+
+const groupFormId = "navigation-group-form";
+const menuFormId = "menu-form";
 
 const getBooleanLabel = (value: boolean) => {
   return value ? "Yes" : "No";
 };
 
+const renderIcon = (iconName: string | null, className?: string) => {
+  const IconComponent = getIcon(iconName);
+  return createElement(IconComponent, { className });
+};
+
+function SummaryCard({
+  label,
+  value,
+  hint,
+  icon,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-sky-100 bg-white/75 p-5 shadow-sm shadow-sky-100/60 backdrop-blur">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+            {label}
+          </p>
+          <p className="mt-2 text-3xl font-black text-slate-950">{value}</p>
+          <p className="mt-1 text-sm font-medium text-slate-500">{hint}</p>
+        </div>
+
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-100 bg-sky-50 text-blue-600 shadow-sm">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MenusContent() {
+  const { reloadNavigation } = useNavigation();
+
+  const [activeTab, setActiveTab] = useState<BuilderTab>("groups");
+
+  const [groups, setGroups] = useState<NavigationGroupRecord[]>([]);
+  const [allGroups, setAllGroups] = useState<NavigationGroupRecord[]>([]);
   const [menus, setMenus] = useState<Menu[]>([]);
   const [allMenus, setAllMenus] = useState<Menu[]>([]);
-  const [navigationGroups, setNavigationGroups] = useState<
-    NavigationGroupRecord[]
-  >([]);
 
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+  const [groupTotalRecords, setGroupTotalRecords] = useState(0);
+  const [groupTotalPages, setGroupTotalPages] = useState(0);
+  const [menuTotalRecords, setMenuTotalRecords] = useState(0);
+  const [menuTotalPages, setMenuTotalPages] = useState(0);
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] =
+  const [groupPage, setGroupPage] = useState(1);
+  const [groupPageSize, setGroupPageSize] =
     useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [visibilityFilter, setVisibilityFilter] =
+  const [groupSearchTerm, setGroupSearchTerm] = useState("");
+  const [groupStatusFilter, setGroupStatusFilter] =
+    useState<StatusFilter>("all");
+  const [groupVisibilityFilter, setGroupVisibilityFilter] =
+    useState<NavigationGroupVisibilityFilter>("all");
+
+  const [menuPage, setMenuPage] = useState(1);
+  const [menuPageSize, setMenuPageSize] =
+    useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
+  const [menuSearchTerm, setMenuSearchTerm] = useState("");
+  const [menuStatusFilter, setMenuStatusFilter] = useState<StatusFilter>("all");
+  const [menuVisibilityFilter, setMenuVisibilityFilter] =
     useState<MenuVisibilityFilter>("all");
   const [groupFilter, setGroupFilter] = useState("all");
 
-  const [loading, setLoading] = useState(true);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [editingMenu, setEditingMenu] = useState<Menu | null>(null);
-  const [menuSubmitting, setMenuSubmitting] = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [menusLoading, setMenusLoading] = useState(true);
 
-  const [selectedMenu, setSelectedMenu] = useState<Menu | null>(null);
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
-    null
-  );
+  const [drawerMode, setDrawerMode] = useState<BuilderTab | null>(null);
+  const [editingGroup, setEditingGroup] =
+    useState<NavigationGroupRecord | null>(null);
+  const [editingMenu, setEditingMenu] = useState<Menu | null>(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
-  const menuFormId = "menu-form";
-  const numericPageSize = pageSize === "all" ? 100 : Number(pageSize);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const selectedGroupId =
+    groupFilter === "all" ? undefined : Number(groupFilter);
+  const numericGroupPageSize =
+    groupPageSize === "all" ? Math.max(groupTotalRecords, 1) : Number(groupPageSize);
+  const numericMenuPageSize =
+    menuPageSize === "all" ? Math.max(menuTotalRecords, 1) : Number(menuPageSize);
+
+  const groupById = useMemo(() => {
+    return new Map(allGroups.map((group) => [group.id, group]));
+  }, [allGroups]);
+
+  const menuById = useMemo(() => {
+    return new Map(allMenus.map((menu) => [menu.id, menu]));
+  }, [allMenus]);
+
+  const summary = useMemo(() => {
+    return {
+      totalGroups: allGroups.length,
+      visibleGroups: allGroups.filter((group) => group.is_visible).length,
+      totalMenus: allMenus.length,
+      hiddenMenus: allMenus.filter((menu) => !menu.is_visible).length,
+    };
+  }, [allGroups, allMenus]);
 
   const showSuccess = useCallback((message: string) => {
     setSuccessMessage(message);
@@ -89,79 +199,132 @@ function MenusContent() {
     }, 4000);
   }, []);
 
-  const selectedGroupId = groupFilter === "all" ? null : Number(groupFilter);
+  const refreshLiveNavigation = useCallback(() => {
+    clearNavigationCache();
+    void reloadNavigation();
+  }, [reloadNavigation]);
 
-  const navigationGroupById = useMemo(() => {
-    return new Map(navigationGroups.map((group) => [group.id, group]));
-  }, [navigationGroups]);
-
-  const menuById = useMemo(() => {
-    return new Map(allMenus.map((menu) => [menu.id, menu]));
-  }, [allMenus]);
-
-  const loadLookups = useCallback(async () => {
+  const loadLookups = useCallback(() => {
     return Promise.all([
       getAllNavigationGroups({
-        status: "active",
+        status: "all",
+        visibility: "all",
         sortBy: "sort_order",
         sortOrder: "asc",
       }),
       getAllMenus({
+        status: "all",
+        visibility: "all",
         sortBy: "sort_order",
         sortOrder: "asc",
       }),
     ]);
   }, []);
 
-  const loadMenus = useCallback(
-    async (showPageLoading = false) => {
+  const loadGroups = useCallback(
+    async (showTableLoading = true) => {
       try {
-        if (showPageLoading) {
-          setLoading(true);
+        if (showTableLoading) {
+          setGroupsLoading(true);
         }
 
         const response =
-          pageSize === "all"
+          groupPageSize === "all"
+            ? await getAllNavigationGroups({
+                search: groupSearchTerm,
+                status: groupStatusFilter,
+                visibility: groupVisibilityFilter,
+                sortBy: "sort_order",
+                sortOrder: "asc",
+              })
+            : await getNavigationGroupsPage({
+                page: groupPage,
+                pageSize: Number(groupPageSize) as 10 | 20 | 30 | 40 | 50 | 100,
+                search: groupSearchTerm,
+                status: groupStatusFilter,
+                visibility: groupVisibilityFilter,
+                sortBy: "sort_order",
+                sortOrder: "asc",
+              });
+
+        setGroups(response.items);
+        setGroupTotalRecords(response.total);
+        setGroupTotalPages(response.total_pages);
+      } catch (error) {
+        console.error("Failed to load navigation groups:", error);
+        setGroups([]);
+        setGroupTotalRecords(0);
+        setGroupTotalPages(0);
+        showError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load navigation groups."
+        );
+      } finally {
+        if (showTableLoading) {
+          setGroupsLoading(false);
+        }
+      }
+    },
+    [
+      groupPage,
+      groupPageSize,
+      groupSearchTerm,
+      groupStatusFilter,
+      groupVisibilityFilter,
+      showError,
+    ]
+  );
+
+  const loadMenus = useCallback(
+    async (showTableLoading = true) => {
+      try {
+        if (showTableLoading) {
+          setMenusLoading(true);
+        }
+
+        const response =
+          menuPageSize === "all"
             ? await getAllMenus({
-                search: searchTerm,
-                status: statusFilter,
-                visibility: visibilityFilter,
+                search: menuSearchTerm,
+                status: menuStatusFilter,
+                visibility: menuVisibilityFilter,
                 navigationGroupId: selectedGroupId,
                 sortBy: "sort_order",
                 sortOrder: "asc",
               })
             : await getMenusPage({
-                page,
-                pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
-                search: searchTerm,
-                status: statusFilter,
-                visibility: visibilityFilter,
+                page: menuPage,
+                pageSize: Number(menuPageSize) as 10 | 20 | 30 | 40 | 50 | 100,
+                search: menuSearchTerm,
+                status: menuStatusFilter,
+                visibility: menuVisibilityFilter,
                 navigationGroupId: selectedGroupId,
                 sortBy: "sort_order",
                 sortOrder: "asc",
               });
 
         setMenus(response.items);
-        setTotalRecords(response.total);
-        setTotalPages(response.total_pages);
+        setMenuTotalRecords(response.total);
+        setMenuTotalPages(response.total_pages);
       } catch (error) {
         console.error("Failed to load menus:", error);
         setMenus([]);
-        setTotalRecords(0);
-        setTotalPages(0);
+        setMenuTotalRecords(0);
+        setMenuTotalPages(0);
         showError(error instanceof Error ? error.message : "Failed to load menus.");
       } finally {
-        if (showPageLoading) {
-          setLoading(false);
+        if (showTableLoading) {
+          setMenusLoading(false);
         }
       }
     },
     [
-      page,
-      pageSize,
-      searchTerm,
-      statusFilter,
-      visibilityFilter,
+      menuPage,
+      menuPageSize,
+      menuSearchTerm,
+      menuStatusFilter,
+      menuVisibilityFilter,
       selectedGroupId,
       showError,
     ]
@@ -176,17 +339,17 @@ function MenusContent() {
       .then(([groupsResponse, menusResponse]) => {
         if (!isMounted) return;
 
-        setNavigationGroups(groupsResponse.items);
+        setAllGroups(groupsResponse.items);
         setAllMenus(menusResponse.items);
       })
       .catch((error) => {
         if (!isMounted) return;
 
-        console.error("Failed to load menu lookup data:", error);
+        console.error("Failed to load navigation builder lookup data:", error);
         showError(
           error instanceof Error
             ? error.message
-            : "Failed to load menu lookup data."
+            : "Failed to load navigation builder lookup data."
         );
       });
 
@@ -199,21 +362,81 @@ function MenusContent() {
     let isMounted = true;
 
     const request =
-      pageSize === "all"
+      groupPageSize === "all"
+        ? getAllNavigationGroups({
+            search: groupSearchTerm,
+            status: groupStatusFilter,
+            visibility: groupVisibilityFilter,
+            sortBy: "sort_order",
+            sortOrder: "asc",
+          })
+        : getNavigationGroupsPage({
+            page: groupPage,
+            pageSize: Number(groupPageSize) as 10 | 20 | 30 | 40 | 50 | 100,
+            search: groupSearchTerm,
+            status: groupStatusFilter,
+            visibility: groupVisibilityFilter,
+            sortBy: "sort_order",
+            sortOrder: "asc",
+          });
+
+    void request
+      .then((response) => {
+        if (!isMounted) return;
+
+        setGroups(response.items);
+        setGroupTotalRecords(response.total);
+        setGroupTotalPages(response.total_pages);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+
+        console.error("Failed to load navigation groups:", error);
+        setGroups([]);
+        setGroupTotalRecords(0);
+        setGroupTotalPages(0);
+        showError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load navigation groups."
+        );
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setGroupsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    groupPage,
+    groupPageSize,
+    groupSearchTerm,
+    groupStatusFilter,
+    groupVisibilityFilter,
+    showError,
+  ]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const request =
+      menuPageSize === "all"
         ? getAllMenus({
-            search: searchTerm,
-            status: statusFilter,
-            visibility: visibilityFilter,
+            search: menuSearchTerm,
+            status: menuStatusFilter,
+            visibility: menuVisibilityFilter,
             navigationGroupId: selectedGroupId,
             sortBy: "sort_order",
             sortOrder: "asc",
           })
         : getMenusPage({
-            page,
-            pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
-            search: searchTerm,
-            status: statusFilter,
-            visibility: visibilityFilter,
+            page: menuPage,
+            pageSize: Number(menuPageSize) as 10 | 20 | 30 | 40 | 50 | 100,
+            search: menuSearchTerm,
+            status: menuStatusFilter,
+            visibility: menuVisibilityFilter,
             navigationGroupId: selectedGroupId,
             sortBy: "sort_order",
             sortOrder: "asc",
@@ -224,229 +447,255 @@ function MenusContent() {
         if (!isMounted) return;
 
         setMenus(response.items);
-        setTotalRecords(response.total);
-        setTotalPages(response.total_pages);
+        setMenuTotalRecords(response.total);
+        setMenuTotalPages(response.total_pages);
       })
       .catch((error) => {
         if (!isMounted) return;
 
         console.error("Failed to load menus:", error);
         setMenus([]);
-        setTotalRecords(0);
-        setTotalPages(0);
+        setMenuTotalRecords(0);
+        setMenuTotalPages(0);
         showError(error instanceof Error ? error.message : "Failed to load menus.");
       })
       .finally(() => {
         if (!isMounted) return;
-        setLoading(false);
+        setMenusLoading(false);
       });
 
     return () => {
       isMounted = false;
     };
   }, [
-    page,
-    pageSize,
-    searchTerm,
-    statusFilter,
-    visibilityFilter,
+    menuPage,
+    menuPageSize,
+    menuSearchTerm,
+    menuStatusFilter,
+    menuVisibilityFilter,
     selectedGroupId,
     showError,
   ]);
 
-  const handlePageSizeChange = (nextPageSize: CrudPageSizeOption) => {
-    setPageSize(nextPageSize);
-    setPage(1);
+  const refreshLookups = async () => {
+    const [groupsResponse, menusResponse] = await loadLookups();
+    setAllGroups(groupsResponse.items);
+    setAllMenus(menusResponse.items);
   };
 
-  const handleSearchChange = (nextSearchTerm: string) => {
-    setSearchTerm(nextSearchTerm);
-    setPage(1);
+  const handleGroupSuccess = () => {
+    const wasEditing = Boolean(editingGroup);
+
+    setDrawerMode(null);
+    setEditingGroup(null);
+    setFormSubmitting(false);
+
+    showSuccess(
+      wasEditing
+        ? "Navigation group updated successfully."
+        : "Navigation group created successfully."
+    );
+
+    void loadGroups(false);
+    void refreshLookups();
+    refreshLiveNavigation();
   };
 
-  const handleStatusChange = (nextStatus: StatusFilter) => {
-    setStatusFilter(nextStatus);
-    setPage(1);
-  };
-
-  const handleVisibilityChange = (nextVisibility: MenuVisibilityFilter) => {
-    setVisibilityFilter(nextVisibility);
-    setPage(1);
-  };
-
-  const handleGroupChange = (nextGroupId: string) => {
-    setGroupFilter(nextGroupId);
-    setPage(1);
-  };
-
-  const handlePageChange = (nextPage: number) => {
-    if (nextPage < 1 || nextPage > totalPages) return;
-
-    setPage(nextPage);
-  };
-
-  const handleCreate = () => {
-    setEditingMenu(null);
-    setDrawerOpen(true);
-  };
-
-  const handleExport = () => {
-    showSuccess("Export feature will be implemented in the next phase.");
-  };
-
-  const handleImport = () => {
-    showSuccess("Import feature will be implemented in the next phase.");
-  };
-
-  const handleEdit = (menu: Menu) => {
-    setEditingMenu(menu);
-    setDrawerOpen(true);
-  };
-
-  const handleCloseDrawer = () => {
-    setDrawerOpen(false);
-    setEditingMenu(null);
-    setMenuSubmitting(false);
-  };
-
-  const handleSuccess = () => {
+  const handleMenuSuccess = () => {
     const wasEditing = Boolean(editingMenu);
 
-    setDrawerOpen(false);
+    setDrawerMode(null);
     setEditingMenu(null);
+    setFormSubmitting(false);
 
     showSuccess(
       wasEditing ? "Menu updated successfully." : "Menu created successfully."
     );
 
     void loadMenus(false);
-    void loadLookups().then(([groupsResponse, menusResponse]) => {
-      setNavigationGroups(groupsResponse.items);
-      setAllMenus(menusResponse.items);
-    });
+    void refreshLookups();
+    refreshLiveNavigation();
   };
 
-  const openConfirm = (menu: Menu, action: ConfirmAction) => {
-    setSelectedMenu(menu);
-    setConfirmAction(action);
-  };
-
-  const closeConfirm = () => {
-    if (confirmLoading) return;
-
-    setSelectedMenu(null);
-    setConfirmAction(null);
+  const handleCloseDrawer = () => {
+    setDrawerMode(null);
+    setEditingGroup(null);
+    setEditingMenu(null);
+    setFormSubmitting(false);
   };
 
   const handleConfirmAction = async () => {
-    if (!selectedMenu || !confirmAction) {
-      return;
-    }
+    if (!confirmState) return;
 
     try {
       setConfirmLoading(true);
 
-      if (confirmAction === "inactive") {
-        await deactivateMenu(selectedMenu.id);
-        showSuccess("Menu marked as inactive successfully.");
+      if (confirmState.target === "group") {
+        if (confirmState.action === "inactive") {
+          await deactivateNavigationGroup(confirmState.item.id);
+          showSuccess("Navigation group marked as inactive successfully.");
+        }
+
+        if (confirmState.action === "restore") {
+          await restoreNavigationGroup(confirmState.item.id);
+          showSuccess("Navigation group restored successfully.");
+        }
+
+        if (confirmState.action === "permanent_delete") {
+          await permanentlyDeleteNavigationGroup(confirmState.item.id);
+          showSuccess("Navigation group permanently deleted successfully.");
+        }
+
+        setConfirmState(null);
+        await loadGroups(false);
       }
 
-      if (confirmAction === "restore") {
-        await restoreMenu(selectedMenu.id);
-        showSuccess("Menu restored successfully.");
+      if (confirmState.target === "menu") {
+        if (confirmState.action === "inactive") {
+          await deactivateMenu(confirmState.item.id);
+          showSuccess("Menu marked as inactive successfully.");
+        }
+
+        if (confirmState.action === "restore") {
+          await restoreMenu(confirmState.item.id);
+          showSuccess("Menu restored successfully.");
+        }
+
+        if (confirmState.action === "permanent_delete") {
+          await permanentlyDeleteMenu(confirmState.item.id);
+          showSuccess("Menu permanently deleted successfully.");
+        }
+
+        setConfirmState(null);
+        await loadMenus(false);
       }
 
-      if (confirmAction === "permanent_delete") {
-        await permanentlyDeleteMenu(selectedMenu.id);
-        showSuccess("Menu permanently deleted successfully.");
-      }
-
-      setSelectedMenu(null);
-      setConfirmAction(null);
-      await loadMenus(false);
-
-      const [groupsResponse, menusResponse] = await loadLookups();
-      setNavigationGroups(groupsResponse.items);
-      setAllMenus(menusResponse.items);
+      await refreshLookups();
+      refreshLiveNavigation();
     } catch (error) {
-      console.error("Menu action failed:", error);
+      console.error("Navigation builder action failed:", error);
       showError(
         error instanceof Error
           ? error.message
-          : "Menu action failed. Please try again."
+          : "Navigation builder action failed. Please try again."
       );
     } finally {
       setConfirmLoading(false);
     }
   };
 
+  const closeConfirm = () => {
+    if (confirmLoading) return;
+    setConfirmState(null);
+  };
+
   const getConfirmTitle = () => {
-    if (confirmAction === "inactive") return "Mark Menu as Inactive?";
-    if (confirmAction === "restore") return "Restore Menu?";
-    if (confirmAction === "permanent_delete") return "Permanently Delete Menu?";
+    const target = confirmState?.target === "group" ? "Group" : "Menu";
+
+    if (confirmState?.action === "inactive") return `Mark ${target} as Inactive?`;
+    if (confirmState?.action === "restore") return `Restore ${target}?`;
+    if (confirmState?.action === "permanent_delete") {
+      return `Permanently Delete ${target}?`;
+    }
 
     return "";
   };
 
   const getConfirmMessage = () => {
-    if (!selectedMenu) return "";
+    if (!confirmState) return "";
 
-    if (confirmAction === "inactive") {
-      return `Are you sure you want to mark "${selectedMenu.menu_title}" as inactive?`;
+    const name =
+      confirmState.target === "group"
+        ? confirmState.item.group_title
+        : confirmState.item.menu_title;
+
+    if (confirmState.action === "inactive") {
+      return `Are you sure you want to mark "${name}" as inactive?`;
     }
 
-    if (confirmAction === "restore") {
-      return `Are you sure you want to restore "${selectedMenu.menu_title}"?`;
+    if (confirmState.action === "restore") {
+      return `Are you sure you want to restore "${name}"?`;
     }
 
-    if (confirmAction === "permanent_delete") {
-      return `Are you sure you want to permanently delete "${selectedMenu.menu_title}"? This action cannot be undone.`;
+    if (confirmState.action === "permanent_delete") {
+      return `Are you sure you want to permanently delete "${name}"? This action cannot be undone.`;
     }
 
     return "";
   };
 
   const getConfirmLabel = () => {
-    if (confirmAction === "inactive") return "Mark Inactive";
-    if (confirmAction === "restore") return "Restore";
-    if (confirmAction === "permanent_delete") return "Permanent Delete";
+    if (confirmState?.action === "inactive") return "Mark Inactive";
+    if (confirmState?.action === "restore") return "Restore";
+    if (confirmState?.action === "permanent_delete") return "Permanent Delete";
 
     return "Confirm";
   };
 
   const getConfirmVariant = (): ConfirmVariant => {
-    if (confirmAction === "restore") return "success";
-    if (confirmAction === "inactive") return "warning";
+    if (confirmState?.action === "restore") return "success";
+    if (confirmState?.action === "inactive") return "warning";
 
     return "danger";
+  };
+
+  const handleGroupPageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > groupTotalPages) return;
+    setGroupPage(nextPage);
+  };
+
+  const handleMenuPageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > menuTotalPages) return;
+    setMenuPage(nextPage);
   };
 
   return (
     <>
       <div className="space-y-6">
-        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="bg-linear-to-r from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <section className="overflow-hidden rounded-[2rem] border border-sky-100 bg-linear-to-br from-white via-slate-50 to-sky-50 shadow-xl shadow-sky-100/60">
+          <div className="relative overflow-hidden px-6 py-7">
+            <div className="absolute right-0 top-0 h-44 w-44 rounded-full bg-blue-200/30 blur-3xl" />
+            <div className="absolute bottom-0 left-20 h-32 w-32 rounded-full bg-cyan-200/30 blur-3xl" />
+
+            <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-200">
-                  <MenuIcon className="h-4 w-4" />
+                <div className="inline-flex items-center gap-2 rounded-full border border-sky-100 bg-white/80 px-3 py-1 text-xs font-black uppercase tracking-[0.22em] text-blue-700 shadow-sm">
+                  <Sparkles className="h-4 w-4" />
                   Security Foundation
                 </div>
 
-                <h1 className="mt-4 text-2xl font-bold tracking-tight">
+                <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
                   Navigation Builder
                 </h1>
 
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                  Manage dynamic menu structure, parent-child hierarchy, route paths and visibility rules.
+                <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600">
+                  Design, organize, and control AMS sidebar groups, menus,
+                  hierarchy, route paths, icons and visibility from one elegant place.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleCreate}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-slate-100"
+                  onClick={() => {
+                    setActiveTab("groups");
+                    setEditingGroup(null);
+                    setDrawerMode("groups");
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-950/15 transition hover:bg-slate-800"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Group
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("menus");
+                    setEditingMenu(null);
+                    setDrawerMode("menus");
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/80 px-4 py-2.5 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-sky-50"
                 >
                   <Plus className="h-4 w-4" />
                   Add Menu
@@ -454,8 +703,8 @@ function MenusContent() {
 
                 <button
                   type="button"
-                  onClick={handleExport}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-white/15"
+                  onClick={() => showSuccess("Export feature will be implemented in the next phase.")}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white"
                 >
                   <Download className="h-4 w-4" />
                   Export
@@ -463,235 +712,530 @@ function MenusContent() {
 
                 <button
                   type="button"
-                  onClick={handleImport}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-white/15"
+                  onClick={() => showSuccess("Import feature will be implemented in the next phase.")}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white"
                 >
                   <Upload className="h-4 w-4" />
                   Import
                 </button>
               </div>
             </div>
-          </div>
 
-          <CrudToolbar
-            pageSize={pageSize}
-            onPageSizeChange={(value) =>
-              handlePageSizeChange(value as CrudPageSizeOption)
-            }
-            onRefresh={() => loadMenus(true)}
-            onReset={() => {
-              setSearchTerm("");
-              setStatusFilter("all");
-              setVisibilityFilter("all");
-              setGroupFilter("all");
-              setPageSize(DEFAULT_CRUD_PAGE_SIZE);
-              setPage(1);
-            }}
-            filters={[
-              {
-                key: "search",
-                label: "Search",
-                type: "search",
-                value: searchTerm,
-                placeholder: "Search menu.",
-                onChange: handleSearchChange,
-              },
-              {
-                key: "group",
-                label: "Group",
-                type: "select",
-                value: groupFilter,
-                options: [
-                  { value: "all", label: "All Groups" },
-                  ...navigationGroups.map((group) => ({
-                    value: String(group.id),
-                    label: group.group_title,
-                  })),
-                ],
-                onChange: handleGroupChange,
-              },
-              {
-                key: "visibility",
-                label: "Visibility",
-                type: "select",
-                value: visibilityFilter,
-                options: [
-                  { value: "all", label: "All" },
-                  { value: "visible", label: "Visible" },
-                  { value: "hidden", label: "Hidden" },
-                ],
-                onChange: (value) =>
-                  handleVisibilityChange(value as MenuVisibilityFilter),
-              },
-              {
-                key: "status",
-                label: "Status",
-                type: "select",
-                value: statusFilter,
-                options: [
-                  { value: "all", label: "All" },
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ],
-                onChange: (value) => handleStatusChange(value as StatusFilter),
-              },
-            ]}
-          />
-
-          {successMessage || errorMessage ? (
-            <div className="border-b border-slate-200 px-6 py-4">
-              {successMessage ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                  {successMessage}
-                </div>
-              ) : null}
-
-              {errorMessage ? (
-                <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
-                  {errorMessage}
-                </div>
-              ) : null}
+            <div className="relative mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <SummaryCard
+                label="Total Groups"
+                value={summary.totalGroups}
+                hint="Sidebar sections"
+                icon={<Layers3 className="h-5 w-5" />}
+              />
+              <SummaryCard
+                label="Visible Groups"
+                value={summary.visibleGroups}
+                hint="Shown in sidebar"
+                icon={<Eye className="h-5 w-5" />}
+              />
+              <SummaryCard
+                label="Total Menus"
+                value={summary.totalMenus}
+                hint="Navigation entries"
+                icon={<MenuIcon className="h-5 w-5" />}
+              />
+              <SummaryCard
+                label="Hidden Menus"
+                value={summary.hiddenMenus}
+                hint="Kept for future"
+                icon={<EyeOff className="h-5 w-5" />}
+              />
             </div>
-          ) : null}
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">SL</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Menu</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Group</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Parent</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Route</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Level / Sort</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Visible</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500">Action</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-5 py-16 text-center text-slate-400"
-                    >
-                      Loading menus...
-                    </td>
-                  </tr>
-                ) : menus.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-5 py-16 text-center text-slate-400"
-                    >
-                      No menu data found. Click Create to add first menu.
-                    </td>
-                  </tr>
-                ) : (
-                  menus.map((menu, index) => {
-                    const group = menu.navigation_group_id
-                      ? navigationGroupById.get(menu.navigation_group_id)
-                      : null;
-                    const parent = menu.parent_menu_id
-                      ? menuById.get(menu.parent_menu_id)
-                      : null;
-
-                    return (
-                      <tr
-                        key={menu.id}
-                        className={`hover:bg-slate-50/80 ${
-                          !menu.is_active ? "bg-slate-50 opacity-70" : ""
-                        }`}
-                      >
-                        <td className="px-5 py-4 font-semibold text-slate-600">
-                          {pageSize === "all"
-                            ? index + 1
-                            : (page - 1) * numericPageSize + index + 1}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="font-bold text-slate-900">
-                            {menu.menu_title}
-                          </div>
-                          <div className="mt-1 text-xs font-semibold text-slate-500">
-                            {menu.menu_key}
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4 font-semibold text-slate-700">
-                          {group?.group_title || "-"}
-                        </td>
-
-                        <td className="px-5 py-4 text-slate-600">
-                          {parent ? parent.menu_title : "Root"}
-                        </td>
-
-                        <td className="px-5 py-4 text-slate-600">
-                          <span className="line-clamp-1">
-                            {getMenuDisplayPath(menu)}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex flex-col gap-1">
-                            <CrudPillBadge>Level {menu.menu_level}</CrudPillBadge>
-                            <span className="text-xs font-semibold text-slate-500">
-                              Sort {menu.sort_order}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <CrudPillBadge>
-                            {getBooleanLabel(menu.is_visible)}
-                          </CrudPillBadge>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <CrudStatusBadge active={menu.is_active} />
-                        </td>
-
-                        <td className="px-5 py-4 text-right">
-                          <MenuRowActions
-                            menu={menu}
-                            onEdit={handleEdit}
-                            onInactive={(selected) =>
-                              openConfirm(selected, "inactive")
-                            }
-                            onRestore={(selected) =>
-                              openConfirm(selected, "restore")
-                            }
-                            onPermanentDelete={(selected) =>
-                              openConfirm(selected, "permanent_delete")
-                            }
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
           </div>
 
-          <div className="border-t border-slate-200 px-6 py-5">
-            <CrudPagination
-              page={page}
-              totalPages={totalPages}
-              total={totalRecords}
-              pageSize={numericPageSize}
-              onPageChange={handlePageChange}
-            />
+          <div className="border-t border-sky-100 bg-white/70 px-6 py-4 backdrop-blur">
+            <div className="inline-flex rounded-2xl border border-sky-100 bg-sky-50/80 p-1 shadow-sm">
+              {[
+                { key: "groups" as const, label: "Groups", icon: Layers3 },
+                { key: "menus" as const, label: "Menus", icon: MenuIcon },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const selected = activeTab === tab.key;
+
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black transition ${
+                      selected
+                        ? "bg-white text-blue-700 shadow-sm"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </section>
+
+        {successMessage || errorMessage ? (
+          <div>
+            {successMessage ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+                {successMessage}
+              </div>
+            ) : null}
+
+            {errorMessage ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                {errorMessage}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeTab === "groups" ? (
+          <section className="overflow-hidden rounded-3xl border border-sky-100 bg-white shadow-sm shadow-sky-100/60">
+            <CrudToolbar
+              pageSize={groupPageSize}
+              onPageSizeChange={(value) => {
+                setGroupPageSize(value as CrudPageSizeOption);
+                setGroupPage(1);
+              }}
+              onRefresh={() => {
+                void loadGroups(true);
+                void refreshLookups();
+              }}
+              onReset={() => {
+                setGroupSearchTerm("");
+                setGroupStatusFilter("all");
+                setGroupVisibilityFilter("all");
+                setGroupPageSize(DEFAULT_CRUD_PAGE_SIZE);
+                setGroupPage(1);
+              }}
+              filters={[
+                {
+                  key: "search",
+                  label: "Search",
+                  type: "search",
+                  value: groupSearchTerm,
+                  placeholder: "Search group.",
+                  onChange: (value) => {
+                    setGroupSearchTerm(value);
+                    setGroupPage(1);
+                  },
+                },
+                {
+                  key: "visibility",
+                  label: "Visibility",
+                  type: "select",
+                  value: groupVisibilityFilter,
+                  options: [
+                    { value: "all", label: "All" },
+                    { value: "visible", label: "Visible" },
+                    { value: "hidden", label: "Hidden" },
+                  ],
+                  onChange: (value) => {
+                    setGroupVisibilityFilter(
+                      value as NavigationGroupVisibilityFilter
+                    );
+                    setGroupPage(1);
+                  },
+                },
+                {
+                  key: "status",
+                  label: "Status",
+                  type: "select",
+                  value: groupStatusFilter,
+                  options: [
+                    { value: "all", label: "All" },
+                    { value: "active", label: "Active" },
+                    { value: "inactive", label: "Inactive" },
+                  ],
+                  onChange: (value) => {
+                    setGroupStatusFilter(value as StatusFilter);
+                    setGroupPage(1);
+                  },
+                },
+              ]}
+            />
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                <thead className="bg-sky-50/60">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">SL</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Group</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Icon</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Parent</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Sort</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Visible</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {groupsLoading ? (
+                    <tr>
+                      <td colSpan={8} className="px-5 py-16 text-center text-slate-400">
+                        Loading navigation groups...
+                      </td>
+                    </tr>
+                  ) : groups.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-5 py-16 text-center text-slate-400">
+                        No navigation group found. Click Add Group to create one.
+                      </td>
+                    </tr>
+                  ) : (
+                    groups.map((group, index) => {
+                      const parent = group.parent_group_id
+                        ? groupById.get(group.parent_group_id)
+                        : null;
+
+                      return (
+                        <tr
+                          key={group.id}
+                          className={`transition hover:bg-sky-50/50 ${
+                            !group.is_active ? "bg-slate-50 opacity-70" : ""
+                          }`}
+                        >
+                          <td className="px-5 py-4 font-semibold text-slate-600">
+                            {groupPageSize === "all"
+                              ? index + 1
+                              : (groupPage - 1) * numericGroupPageSize + index + 1}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-sky-100 bg-sky-50 text-blue-600">
+                                {renderIcon(group.group_icon, "h-5 w-5")}
+                              </div>
+
+                              <div>
+                                <div className="font-black text-slate-950">
+                                  {group.group_title}
+                                </div>
+                                <div className="mt-1 text-xs font-bold text-slate-500">
+                                  {group.group_key}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 font-semibold text-slate-700">
+                            {group.group_icon || "-"}
+                          </td>
+
+                          <td className="px-5 py-4 text-slate-600">
+                            {parent ? parent.group_title : "Root"}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <CrudPillBadge>Sort {group.sort_order}</CrudPillBadge>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <CrudPillBadge>
+                              {getBooleanLabel(group.is_visible)}
+                            </CrudPillBadge>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <CrudStatusBadge active={group.is_active} />
+                          </td>
+
+                          <td className="px-5 py-4 text-right">
+                            <NavigationGroupRowActions
+                              group={group}
+                              onEdit={(selected) => {
+                                setEditingGroup(selected);
+                                setDrawerMode("groups");
+                              }}
+                              onInactive={(selected) =>
+                                setConfirmState({
+                                  target: "group",
+                                  action: "inactive",
+                                  item: selected,
+                                })
+                              }
+                              onRestore={(selected) =>
+                                setConfirmState({
+                                  target: "group",
+                                  action: "restore",
+                                  item: selected,
+                                })
+                              }
+                              onPermanentDelete={(selected) =>
+                                setConfirmState({
+                                  target: "group",
+                                  action: "permanent_delete",
+                                  item: selected,
+                                })
+                              }
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-slate-200 px-6 py-5">
+              <CrudPagination
+                page={groupPage}
+                totalPages={groupTotalPages}
+                total={groupTotalRecords}
+                pageSize={numericGroupPageSize}
+                onPageChange={handleGroupPageChange}
+              />
+            </div>
+          </section>
+        ) : (
+          <section className="overflow-hidden rounded-3xl border border-sky-100 bg-white shadow-sm shadow-sky-100/60">
+            <CrudToolbar
+              pageSize={menuPageSize}
+              onPageSizeChange={(value) => {
+                setMenuPageSize(value as CrudPageSizeOption);
+                setMenuPage(1);
+              }}
+              onRefresh={() => {
+                void loadMenus(true);
+                void refreshLookups();
+              }}
+              onReset={() => {
+                setMenuSearchTerm("");
+                setMenuStatusFilter("all");
+                setMenuVisibilityFilter("all");
+                setGroupFilter("all");
+                setMenuPageSize(DEFAULT_CRUD_PAGE_SIZE);
+                setMenuPage(1);
+              }}
+              filters={[
+                {
+                  key: "search",
+                  label: "Search",
+                  type: "search",
+                  value: menuSearchTerm,
+                  placeholder: "Search menu.",
+                  onChange: (value) => {
+                    setMenuSearchTerm(value);
+                    setMenuPage(1);
+                  },
+                },
+                {
+                  key: "group",
+                  label: "Group",
+                  type: "select",
+                  value: groupFilter,
+                  options: [
+                    { value: "all", label: "All Groups" },
+                    ...allGroups.map((group) => ({
+                      value: String(group.id),
+                      label: group.group_title,
+                    })),
+                  ],
+                  onChange: (value) => {
+                    setGroupFilter(value);
+                    setMenuPage(1);
+                  },
+                },
+                {
+                  key: "visibility",
+                  label: "Visibility",
+                  type: "select",
+                  value: menuVisibilityFilter,
+                  options: [
+                    { value: "all", label: "All" },
+                    { value: "visible", label: "Visible" },
+                    { value: "hidden", label: "Hidden" },
+                  ],
+                  onChange: (value) => {
+                    setMenuVisibilityFilter(value as MenuVisibilityFilter);
+                    setMenuPage(1);
+                  },
+                },
+                {
+                  key: "status",
+                  label: "Status",
+                  type: "select",
+                  value: menuStatusFilter,
+                  options: [
+                    { value: "all", label: "All" },
+                    { value: "active", label: "Active" },
+                    { value: "inactive", label: "Inactive" },
+                  ],
+                  onChange: (value) => {
+                    setMenuStatusFilter(value as StatusFilter);
+                    setMenuPage(1);
+                  },
+                },
+              ]}
+            />
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                <thead className="bg-sky-50/60">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">SL</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Menu</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Group</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Parent</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Route</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Level / Sort</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Visible</th>
+                    <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {menusLoading ? (
+                    <tr>
+                      <td colSpan={9} className="px-5 py-16 text-center text-slate-400">
+                        Loading menus...
+                      </td>
+                    </tr>
+                  ) : menus.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-5 py-16 text-center text-slate-400">
+                        No menu data found. Click Add Menu to create one.
+                      </td>
+                    </tr>
+                  ) : (
+                    menus.map((menu, index) => {
+                      const group = menu.navigation_group_id
+                        ? groupById.get(menu.navigation_group_id)
+                        : null;
+                      const parent = menu.parent_menu_id
+                        ? menuById.get(menu.parent_menu_id)
+                        : null;
+
+                      return (
+                        <tr
+                          key={menu.id}
+                          className={`transition hover:bg-sky-50/50 ${
+                            !menu.is_active ? "bg-slate-50 opacity-70" : ""
+                          }`}
+                        >
+                          <td className="px-5 py-4 font-semibold text-slate-600">
+                            {menuPageSize === "all"
+                              ? index + 1
+                              : (menuPage - 1) * numericMenuPageSize + index + 1}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="font-black text-slate-950">
+                              {menu.menu_title}
+                            </div>
+                            <div className="mt-1 text-xs font-bold text-slate-500">
+                              {menu.menu_key}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 font-semibold text-slate-700">
+                            {group?.group_title || "-"}
+                          </td>
+
+                          <td className="px-5 py-4 text-slate-600">
+                            {parent ? parent.menu_title : "Root"}
+                          </td>
+
+                          <td className="px-5 py-4 text-slate-600">
+                            <span className="line-clamp-1">
+                              {getMenuDisplayPath(menu)}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex flex-col gap-1">
+                              <CrudPillBadge>Level {menu.menu_level}</CrudPillBadge>
+                              <span className="text-xs font-semibold text-slate-500">
+                                Sort {menu.sort_order}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <CrudPillBadge>
+                              {getBooleanLabel(menu.is_visible)}
+                            </CrudPillBadge>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <CrudStatusBadge active={menu.is_active} />
+                          </td>
+
+                          <td className="px-5 py-4 text-right">
+                            <MenuRowActions
+                              menu={menu}
+                              onEdit={(selected) => {
+                                setEditingMenu(selected);
+                                setDrawerMode("menus");
+                              }}
+                              onInactive={(selected) =>
+                                setConfirmState({
+                                  target: "menu",
+                                  action: "inactive",
+                                  item: selected,
+                                })
+                              }
+                              onRestore={(selected) =>
+                                setConfirmState({
+                                  target: "menu",
+                                  action: "restore",
+                                  item: selected,
+                                })
+                              }
+                              onPermanentDelete={(selected) =>
+                                setConfirmState({
+                                  target: "menu",
+                                  action: "permanent_delete",
+                                  item: selected,
+                                })
+                              }
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-slate-200 px-6 py-5">
+              <CrudPagination
+                page={menuPage}
+                totalPages={menuTotalPages}
+                total={menuTotalRecords}
+                pageSize={numericMenuPageSize}
+                onPageChange={handleMenuPageChange}
+              />
+            </div>
+          </section>
+        )}
       </div>
 
       <CrudDrawer
-        isOpen={drawerOpen}
-        title={editingMenu ? "Edit Menu" : "Create Menu"}
-        description="Create and maintain navigation menu hierarchy, route path, icon, permission key and visibility."
+        isOpen={Boolean(drawerMode)}
+        title={
+          drawerMode === "groups"
+            ? editingGroup
+              ? "Edit Navigation Group"
+              : "Create Navigation Group"
+            : editingMenu
+              ? "Edit Menu"
+              : "Create Menu"
+        }
+        description={
+          drawerMode === "groups"
+            ? "Create and maintain sidebar sections, icons, ordering, visibility and group-level access."
+            : "Create and maintain navigation menu hierarchy, route path, icon, permission key and visibility."
+        }
         onClose={handleCloseDrawer}
         maxWidthClassName="max-w-4xl"
         footer={
@@ -699,7 +1243,7 @@ function MenusContent() {
             <button
               type="button"
               onClick={handleCloseDrawer}
-              disabled={menuSubmitting}
+              disabled={formSubmitting}
               className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               Cancel
@@ -707,34 +1251,51 @@ function MenusContent() {
 
             <button
               type="submit"
-              form={menuFormId}
-              disabled={menuSubmitting}
+              form={drawerMode === "groups" ? groupFormId : menuFormId}
+              disabled={formSubmitting}
               className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 disabled:opacity-60"
             >
-              {menuSubmitting
+              {formSubmitting
                 ? "Saving..."
-                : editingMenu
-                  ? "Update Menu"
-                  : "Save Menu"}
+                : drawerMode === "groups"
+                  ? editingGroup
+                    ? "Update Group"
+                    : "Save Group"
+                  : editingMenu
+                    ? "Update Menu"
+                    : "Save Menu"}
             </button>
           </>
         }
       >
-        <MenuForm
-          key={editingMenu ? `edit-menu-${editingMenu.id}` : "create-menu"}
-          initialData={editingMenu}
-          navigationGroups={navigationGroups}
-          menus={allMenus}
-          onSuccess={handleSuccess}
-          onCancel={handleCloseDrawer}
-          formId={menuFormId}
-          hideFooter
-          onSubmittingChange={setMenuSubmitting}
-        />
+        {drawerMode === "groups" ? (
+          <NavigationGroupForm
+            key={editingGroup ? `edit-group-${editingGroup.id}` : "create-group"}
+            initialData={editingGroup}
+            groups={allGroups}
+            onSuccess={handleGroupSuccess}
+            onCancel={handleCloseDrawer}
+            formId={groupFormId}
+            hideFooter
+            onSubmittingChange={setFormSubmitting}
+          />
+        ) : (
+          <MenuForm
+            key={editingMenu ? `edit-menu-${editingMenu.id}` : "create-menu"}
+            initialData={editingMenu}
+            navigationGroups={allGroups}
+            menus={allMenus}
+            onSuccess={handleMenuSuccess}
+            onCancel={handleCloseDrawer}
+            formId={menuFormId}
+            hideFooter
+            onSubmittingChange={setFormSubmitting}
+          />
+        )}
       </CrudDrawer>
 
       <ConfirmModal
-        open={Boolean(confirmAction && selectedMenu)}
+        open={Boolean(confirmState)}
         title={getConfirmTitle()}
         message={getConfirmMessage()}
         confirmLabel={getConfirmLabel()}

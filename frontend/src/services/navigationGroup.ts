@@ -1,14 +1,18 @@
 import type {
+  NavigationGroupCreatePayload,
   NavigationGroupListResponse,
+  NavigationGroupMessageResponse,
   NavigationGroupQueryParams,
-  NavigationGroupStatusFilter,
-  NavigationGroupVisibilityFilter,
+  NavigationGroupRecord,
+  NavigationGroupUpdatePayload,
 } from "@/types/navigationGroup";
 
 type ApiValidationError = {
   msg?: string;
   message?: string;
 };
+
+const BASE_URL = "/api/backend/navigation-groups";
 
 const getErrorMessage = async (response: Response) => {
   try {
@@ -37,11 +41,16 @@ const getErrorMessage = async (response: Response) => {
   }
 };
 
-const requestJson = async <T>(url: string): Promise<T> => {
+const requestJson = async <T>(
+  url: string,
+  options: RequestInit = {}
+): Promise<T> => {
   const response = await fetch(url, {
+    ...options,
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
+      ...(options.headers || {}),
     },
   });
 
@@ -49,85 +58,123 @@ const requestJson = async <T>(url: string): Promise<T> => {
     throw new Error(await getErrorMessage(response));
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 };
 
-const getIsActiveParam = (status?: NavigationGroupStatusFilter) => {
-  if (status === "active") return "true";
-  if (status === "inactive") return "false";
-  return null;
-};
+const buildQuery = (params: NavigationGroupQueryParams = {}) => {
+  const query = new URLSearchParams();
 
-const getIsVisibleParam = (visibility?: NavigationGroupVisibilityFilter) => {
-  if (visibility === "visible") return "true";
-  if (visibility === "hidden") return "false";
-  return null;
-};
-
-const buildNavigationGroupQuery = (
-  params: NavigationGroupQueryParams = {}
-) => {
-  const searchParams = new URLSearchParams();
-
-  searchParams.set("page", String(params.page ?? 1));
-  searchParams.set("page_size", String(params.pageSize ?? 100));
+  query.set("page", String(params.page ?? 1));
+  query.set("page_size", String(params.pageSize ?? 20));
+  query.set("sort_by", params.sortBy ?? "sort_order");
+  query.set("sort_order", params.sortOrder ?? "asc");
 
   if (params.search?.trim()) {
-    searchParams.set("search", params.search.trim());
+    query.set("search", params.search.trim());
   }
 
-  const isActive = getIsActiveParam(params.status);
-  if (isActive !== null) {
-    searchParams.set("is_active", isActive);
+  if (params.parentGroupId) {
+    query.set("parent_group_id", String(params.parentGroupId));
   }
 
-  const isVisible = getIsVisibleParam(params.visibility);
-  if (isVisible !== null) {
-    searchParams.set("is_visible", isVisible);
+  if (params.visibility === "visible") {
+    query.set("is_visible", "true");
   }
 
-  searchParams.set("sort_by", params.sortBy ?? "sort_order");
-  searchParams.set("sort_order", params.sortOrder ?? "asc");
+  if (params.visibility === "hidden") {
+    query.set("is_visible", "false");
+  }
 
-  return searchParams.toString();
+  if (params.status === "active") {
+    query.set("is_active", "true");
+  }
+
+  if (params.status === "inactive") {
+    query.set("is_active", "false");
+  }
+
+  return query.toString();
+};
+
+export const normalizeOptionalText = (value: string) => {
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
+export const normalizeOptionalNumber = (value: string) => {
+  if (!value.trim()) return null;
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
 };
 
 export const getNavigationGroupsPage = async (
   params: NavigationGroupQueryParams = {}
 ): Promise<NavigationGroupListResponse> => {
   return requestJson<NavigationGroupListResponse>(
-    `/api/backend/navigation-groups?${buildNavigationGroupQuery(params)}`
+    `${BASE_URL}?${buildQuery(params)}`
   );
 };
 
 export const getAllNavigationGroups = async (
   params: Omit<NavigationGroupQueryParams, "page" | "pageSize"> = {}
 ): Promise<NavigationGroupListResponse> => {
-  const firstPage = await getNavigationGroupsPage({
+  return getNavigationGroupsPage({
     ...params,
     page: 1,
     pageSize: 100,
   });
+};
 
-  if (firstPage.total_pages <= 1) {
-    return firstPage;
-  }
+export const createNavigationGroup = async (
+  payload: NavigationGroupCreatePayload
+): Promise<NavigationGroupMessageResponse> => {
+  return requestJson<NavigationGroupMessageResponse>(BASE_URL, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+};
 
-  const remainingPages = await Promise.all(
-    Array.from({ length: firstPage.total_pages - 1 }, (_, index) =>
-      getNavigationGroupsPage({
-        ...params,
-        page: index + 2,
-        pageSize: 100,
-      })
-    )
+export const updateNavigationGroup = async (
+  groupId: number,
+  payload: NavigationGroupUpdatePayload
+): Promise<NavigationGroupMessageResponse> => {
+  return requestJson<NavigationGroupMessageResponse>(`${BASE_URL}/${groupId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+};
+
+export const deactivateNavigationGroup = async (
+  groupId: number
+): Promise<NavigationGroupMessageResponse> => {
+  return requestJson<NavigationGroupMessageResponse>(`${BASE_URL}/${groupId}`, {
+    method: "DELETE",
+  });
+};
+
+export const restoreNavigationGroup = async (
+  groupId: number
+): Promise<NavigationGroupMessageResponse> => {
+  return requestJson<NavigationGroupMessageResponse>(
+    `${BASE_URL}/${groupId}/restore`,
+    {
+      method: "PATCH",
+    }
   );
+};
 
-  return {
-    ...firstPage,
-    items: [
-      ...firstPage.items,
-      ...remainingPages.flatMap((response) => response.items),
-    ],
-  };
+export const permanentlyDeleteNavigationGroup = async (
+  groupId: number
+): Promise<NavigationGroupMessageResponse> => {
+  return requestJson<NavigationGroupMessageResponse>(
+    `${BASE_URL}/${groupId}/permanent`,
+    {
+      method: "DELETE",
+    }
+  );
+};
+
+export const getGroupDisplayName = (group: NavigationGroupRecord) => {
+  return `${group.group_title} (${group.group_key})`;
 };
