@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ShieldCheck } from "lucide-react";
+import { ChevronDown, ShieldCheck, X } from "lucide-react";
 import { createElement, useMemo, useState } from "react";
 
 import type { NavigationGroup, NavigationMenu } from "@/types/navigation";
@@ -63,6 +63,7 @@ type SidebarMenuItemProps = {
   depth: number;
   openMenus: Record<string, boolean>;
   onToggleMenu: (menuKey: string, isCurrentlyOpen: boolean) => void;
+  onNavigate?: () => void;
 };
 
 function SidebarMenuItem({
@@ -71,6 +72,7 @@ function SidebarMenuItem({
   depth,
   openMenus,
   onToggleMenu,
+  onNavigate,
 }: SidebarMenuItemProps) {
   const children = menu.children ?? [];
   const hasChildren = children.length > 0;
@@ -82,10 +84,10 @@ function SidebarMenuItem({
   const actionCount = menu.actions.length;
   const activeLike = isActive || hasActiveChild;
 
-  const itemClassName = `group flex w-full items-center justify-between rounded-xl py-3 pr-3 text-left text-sm font-semibold transition ${
+  const itemClassName = `group flex w-full items-center justify-between rounded-2xl border py-3 pr-3 text-left text-sm font-semibold transition ${
     activeLike
-      ? "bg-linear-to-r from-blue-600 to-cyan-500 text-white shadow-lg shadow-blue-600/20"
-      : "text-slate-300 hover:bg-white/10 hover:text-white"
+      ? "border-blue-200 bg-linear-to-r from-blue-50 via-sky-50 to-white text-blue-700 shadow-sm shadow-blue-100/70"
+      : "border-transparent text-slate-700 hover:border-sky-100 hover:bg-white/90 hover:text-slate-950 hover:shadow-sm"
   }`;
 
   const itemStyle = {
@@ -93,12 +95,12 @@ function SidebarMenuItem({
   };
 
   const iconClassName = activeLike
-    ? "text-white"
-    : "text-slate-500 group-hover:text-blue-300";
+    ? "text-blue-600"
+    : "text-slate-400 group-hover:text-blue-600";
 
   const badgeClassName = activeLike
-    ? "bg-white/20 text-white"
-    : "bg-slate-800 text-slate-400";
+    ? "bg-blue-100 text-blue-700 ring-1 ring-blue-200/70"
+    : "bg-slate-100 text-slate-500 ring-1 ring-slate-200";
 
   if (hasChildren) {
     return (
@@ -134,7 +136,7 @@ function SidebarMenuItem({
         </button>
 
         {isOpen && (
-          <div className="mt-1 space-y-1 border-l border-white/10 pl-2">
+          <div className="mt-1 space-y-1 border-l border-sky-100 pl-2">
             {children.map((child) => (
               <SidebarMenuItem
                 key={child.id}
@@ -143,6 +145,7 @@ function SidebarMenuItem({
                 depth={depth + 1}
                 openMenus={openMenus}
                 onToggleMenu={onToggleMenu}
+                onNavigate={onNavigate}
               />
             ))}
           </div>
@@ -156,11 +159,11 @@ function SidebarMenuItem({
       <button
         type="button"
         disabled
-        className="group flex w-full cursor-not-allowed items-center justify-between rounded-xl py-3 pr-3 text-left text-sm font-semibold text-slate-500 opacity-70"
+        className="group flex w-full cursor-not-allowed items-center justify-between rounded-2xl border border-transparent py-3 pr-3 text-left text-sm font-semibold text-slate-400 opacity-70"
         style={itemStyle}
       >
         <span className="flex min-w-0 items-center gap-3">
-          {renderIcon(menu.icon, 18, "text-slate-600")}
+          {renderIcon(menu.icon, 18, "text-slate-300")}
           <span className="truncate">{menu.menu_title}</span>
         </span>
       </button>
@@ -168,7 +171,12 @@ function SidebarMenuItem({
   }
 
   return (
-    <Link href={menu.route_path} className={itemClassName} style={itemStyle}>
+    <Link
+      href={menu.route_path}
+      className={itemClassName}
+      style={itemStyle}
+      onClick={() => onNavigate?.()}
+    >
       <span className="flex min-w-0 items-center gap-3">
         {renderIcon(menu.icon, 18, iconClassName)}
         <span className="truncate">{menu.menu_title}</span>
@@ -185,10 +193,147 @@ function SidebarMenuItem({
   );
 }
 
+type SidebarContentProps = {
+  navigation: NavigationGroup[];
+  pathname: string;
+  activeOpenGroups: Record<string, boolean>;
+  openGroups: Record<string, boolean>;
+  openMenus: Record<string, boolean>;
+  onToggleGroup: (groupKey: string, isCurrentlyOpen: boolean) => void;
+  onToggleMenu: (menuKey: string, isCurrentlyOpen: boolean) => void;
+  onNavigate?: () => void;
+  onClose?: () => void;
+  showClose?: boolean;
+};
+
+function SidebarContent({
+  navigation,
+  pathname,
+  activeOpenGroups,
+  openGroups,
+  openMenus,
+  onToggleGroup,
+  onToggleMenu,
+  onNavigate,
+  onClose,
+  showClose = false,
+}: SidebarContentProps) {
+  return (
+    <>
+      <div className="sticky top-0 z-20 border-b border-sky-100 bg-white/85 px-6 py-5 shadow-sm shadow-sky-100/50 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br from-sky-500 via-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25 ring-1 ring-white/80">
+              <ShieldCheck size={26} />
+            </div>
+
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-950">
+                AMS
+              </h1>
+              <p className="text-xs font-medium text-slate-500">
+                Audit Management System
+              </p>
+            </div>
+          </div>
+
+          {showClose ? (
+            <button
+              type="button"
+              aria-label="Close navigation"
+              onClick={onClose}
+              className="rounded-xl border border-sky-100 bg-white/90 p-2 text-slate-600 shadow-sm shadow-sky-100/60 transition hover:bg-sky-50 hover:text-blue-700"
+            >
+              <X size={20} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <nav className="space-y-3 p-4">
+        {navigation.map((group) => {
+          const isOpen =
+            Boolean(openGroups[group.group_key]) ||
+            Boolean(activeOpenGroups[group.group_key]);
+          const hasActiveGroup = groupHasActivePath(group, pathname);
+          const totalMenus = countMenus(group.menus);
+
+          return (
+            <div
+              key={group.id}
+              className={`rounded-3xl border p-2 transition ${
+                hasActiveGroup
+                  ? "border-blue-200 bg-white/85 shadow-sm shadow-blue-100/70"
+                  : "border-sky-100 bg-white/60 shadow-sm shadow-sky-100/40"
+              }`}
+            >
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => onToggleGroup(group.group_key, isOpen)}
+                className="flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition hover:bg-white/90 hover:shadow-sm"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl ring-1 ${
+                      hasActiveGroup
+                        ? "bg-white text-blue-600 ring-blue-100 shadow-sm shadow-blue-100/80"
+                        : "bg-white/85 text-slate-500 ring-sky-100"
+                    }`}
+                  >
+                    {renderIcon(group.group_icon, 19)}
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">
+                      {group.group_title}
+                    </p>
+
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                      {totalMenus} menu
+                    </p>
+                  </div>
+                </div>
+
+                <ChevronDown
+                  size={18}
+                  className={`text-slate-400 transition ${
+                    isOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {isOpen && (
+                <div className="mt-2 space-y-1 pl-2">
+                  {group.menus.map((menu) => (
+                    <SidebarMenuItem
+                      key={menu.id}
+                      menu={menu}
+                      pathname={pathname}
+                      depth={0}
+                      openMenus={openMenus}
+                      onToggleMenu={onToggleMenu}
+                      onNavigate={onNavigate}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+    </>
+  );
+}
+
 export default function EnterpriseSidebar({
   navigation,
+  mobileOpen = false,
+  onMobileClose,
 }: {
   navigation: NavigationGroup[];
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }) {
   const pathname = usePathname();
 
@@ -224,82 +369,44 @@ export default function EnterpriseSidebar({
   };
 
   return (
-    <aside className="fixed left-0 top-0 hidden h-screen w-80 overflow-y-auto border-r border-white/10 bg-slate-950 text-white shadow-2xl lg:block">
-      <div className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/95 px-6 py-5 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500 to-cyan-400 shadow-lg shadow-blue-500/25">
-            <ShieldCheck size={26} />
-          </div>
+    <>
+      <aside className="fixed left-0 top-0 hidden h-screen w-80 overflow-y-auto border-r border-sky-100 bg-linear-to-b from-white via-slate-50 to-sky-50 text-slate-900 shadow-[0_20px_60px_rgba(15,23,42,0.08)] lg:block">
+        <SidebarContent
+          navigation={navigation}
+          pathname={pathname}
+          activeOpenGroups={activeOpenGroups}
+          openGroups={openGroups}
+          openMenus={openMenus}
+          onToggleGroup={toggleGroup}
+          onToggleMenu={toggleMenu}
+        />
+      </aside>
 
-          <div>
-            <h1 className="text-2xl font-black tracking-tight">AMS</h1>
-            <p className="text-xs font-medium text-slate-400">
-              Audit Management System
-            </p>
-          </div>
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close navigation overlay"
+            onClick={onMobileClose}
+            className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm"
+          />
+
+          <aside className="relative h-full w-80 max-w-[86vw] overflow-y-auto border-r border-sky-100 bg-linear-to-b from-white via-slate-50 to-sky-50 text-slate-900 shadow-2xl">
+            <SidebarContent
+              navigation={navigation}
+              pathname={pathname}
+              activeOpenGroups={activeOpenGroups}
+              openGroups={openGroups}
+              openMenus={openMenus}
+              onToggleGroup={toggleGroup}
+              onToggleMenu={toggleMenu}
+              onNavigate={onMobileClose}
+              onClose={onMobileClose}
+              showClose
+            />
+          </aside>
         </div>
-      </div>
-
-      <nav className="space-y-4 p-4">
-        {navigation.map((group) => {
-          const isOpen =
-            Boolean(openGroups[group.group_key]) ||
-            Boolean(activeOpenGroups[group.group_key]);
-          const totalMenus = countMenus(group.menus);
-
-          return (
-            <div
-              key={group.id}
-              className="rounded-2xl border border-white/5 bg-white/3 p-2"
-            >
-              <button
-                type="button"
-                aria-expanded={isOpen}
-                onClick={() => toggleGroup(group.group_key, isOpen)}
-                className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition hover:bg-white/10"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-blue-300">
-                    {renderIcon(group.group_icon, 19)}
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-bold text-slate-100">
-                      {group.group_title}
-                    </p>
-
-                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                      {totalMenus} menu
-                    </p>
-                  </div>
-                </div>
-
-                <ChevronDown
-                  size={18}
-                  className={`text-slate-400 transition ${
-                    isOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {isOpen && (
-                <div className="mt-2 space-y-1 pl-2">
-                  {group.menus.map((menu) => (
-                    <SidebarMenuItem
-                      key={menu.id}
-                      menu={menu}
-                      pathname={pathname}
-                      depth={0}
-                      openMenus={openMenus}
-                      onToggleMenu={toggleMenu}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </nav>
-    </aside>
+      ) : null}
+    </>
   );
 }

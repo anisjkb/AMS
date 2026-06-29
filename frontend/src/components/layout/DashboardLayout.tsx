@@ -47,6 +47,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [userLoading, setUserLoading] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -90,14 +91,24 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
       ) : (
-        <EnterpriseSidebar navigation={navigation} />
+        <EnterpriseSidebar
+          navigation={navigation}
+          mobileOpen={mobileSidebarOpen}
+          onMobileClose={() => setMobileSidebarOpen(false)}
+        />
       )}
 
       <div className="lg:pl-80">
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 px-6 py-4 shadow-sm backdrop-blur-xl">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <button className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm lg:hidden">
+              <button
+                type="button"
+                aria-label="Open navigation"
+                onClick={() => setMobileSidebarOpen(true)}
+                disabled={loading}
+                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 lg:hidden"
+              >
                 <Menu size={22} />
               </button>
 
