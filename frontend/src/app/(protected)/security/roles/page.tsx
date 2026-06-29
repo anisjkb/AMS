@@ -1,4 +1,4 @@
-// E:\Audit\AMS\frontend\src\app\security\roles\page.tsx
+// E:\Audit\AMS\frontend\src\app\(protected)\security\roles\page.tsx
 
 "use client";
 
@@ -6,14 +6,18 @@ import { useCallback, useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
-import DataTablePagination from "@/components/common/DataTablePagination";
-import DataTableToolbar from "@/components/common/DataTableToolbar";
+import ModuleHero from "@/components/common/ModuleHero";
 import PageActionBar from "@/components/common/PageActionBar";
-import RightDrawer from "@/components/common/RightDrawer";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import CrudPagination from "@/components/crud/CrudPagination";
+import { CrudStatusBadge } from "@/components/crud/CrudStatusBadge";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import RoleForm from "@/components/roles/RoleForm";
 import RoleRowActions from "@/components/roles/RoleRowActions";
-
 import {
   deactivateRole,
   getAllRoles,
@@ -21,7 +25,7 @@ import {
   permanentlyDeleteRole,
   restoreRole,
 } from "@/services/role";
-import type { PageSizeOption, StatusFilter } from "@/types/pagination";
+import type { StatusFilter } from "@/types/pagination";
 import type { Role } from "@/types/role";
 
 type ConfirmAction = "inactive" | "restore" | "permanent_delete";
@@ -33,14 +37,13 @@ function RolesContent() {
   const [totalPages, setTotalPages] = useState(0);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] =
+    useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [editingRole, setEditingRole] = useState<Role | null>(null);
 
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -48,6 +51,12 @@ function RolesContent() {
     null
   );
   const [confirmLoading, setConfirmLoading] = useState(false);
+
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const numericPageSize =
+    pageSize === "all" ? Math.max(totalRecords, 1) : Number(pageSize);
 
   const showSuccess = useCallback((message: string) => {
     setSuccessMessage(message);
@@ -68,7 +77,7 @@ function RolesContent() {
   }, []);
 
   const loadRoles = useCallback(
-    async (showPageLoading = false) => {
+    async (showPageLoading = true) => {
       try {
         if (showPageLoading) {
           setLoading(true);
@@ -84,7 +93,7 @@ function RolesContent() {
               })
             : await getRoles({
                 page,
-                pageSize,
+                pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
                 search: searchTerm,
                 status: statusFilter,
                 sortBy: "id",
@@ -122,7 +131,7 @@ function RolesContent() {
           })
         : getRoles({
             page,
-            pageSize,
+            pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
             search: searchTerm,
             status: statusFilter,
             sortBy: "id",
@@ -156,27 +165,6 @@ function RolesContent() {
     };
   }, [page, pageSize, searchTerm, statusFilter, showError]);
 
-  const handlePageSizeChange = (nextPageSize: PageSizeOption) => {
-    setPageSize(nextPageSize);
-    setPage(1);
-  };
-
-  const handleSearchChange = (nextSearchTerm: string) => {
-    setSearchTerm(nextSearchTerm);
-    setPage(1);
-  };
-
-  const handleStatusChange = (nextStatus: StatusFilter) => {
-    setStatusFilter(nextStatus);
-    setPage(1);
-  };
-
-  const handlePageChange = (nextPage: number) => {
-    if (nextPage < 1 || nextPage > totalPages) return;
-
-    setPage(nextPage);
-  };
-
   const handleCreate = () => {
     setEditingRole(null);
     setDrawerOpen(true);
@@ -185,14 +173,6 @@ function RolesContent() {
   const handleEdit = (role: Role) => {
     setEditingRole(role);
     setDrawerOpen(true);
-  };
-
-  const handleExport = () => {
-    showSuccess("Export feature will be implemented in the next phase.");
-  };
-
-  const handleImport = () => {
-    showSuccess("Import feature will be implemented in the next phase.");
   };
 
   const handleCloseDrawer = () => {
@@ -206,10 +186,7 @@ function RolesContent() {
     setDrawerOpen(false);
     setEditingRole(null);
 
-    showSuccess(
-      wasEditing ? "Role updated successfully." : "Role created successfully."
-    );
-
+    showSuccess(wasEditing ? "Role updated successfully." : "Role created successfully.");
     void loadRoles(false);
   };
 
@@ -226,9 +203,7 @@ function RolesContent() {
   };
 
   const handleConfirmAction = async () => {
-    if (!selectedRole || !confirmAction) {
-      return;
-    }
+    if (!selectedRole || !confirmAction) return;
 
     try {
       setConfirmLoading(true);
@@ -300,90 +275,111 @@ function RolesContent() {
     return "danger";
   };
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <section className="rounded-3xl bg-linear-to-r from-slate-900 via-blue-800 to-indigo-700 p-8 text-white shadow-xl">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15">
-              <ShieldCheck size={34} />
-            </div>
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+    setPage(nextPage);
+  };
 
-            <div>
-              <h1 className="text-3xl font-black">Role Management</h1>
-              <p className="mt-1 text-blue-100">
-                Create, update, inactive, restore and permanently delete roles.
-              </p>
-            </div>
-          </div>
-        </section>
+  return (
+    <>
+      <div className="space-y-6">
+        <ModuleHero
+          icon={ShieldCheck}
+          title="Role Management"
+          description="Create, update, deactivate, restore and permanently delete RBAC roles."
+          height="small"
+        />
 
         <PageActionBar
           menuKey="role"
           onCreate={handleCreate}
-          onExport={handleExport}
-          onImport={handleImport}
+          onExport={() =>
+            showSuccess("Export feature will be implemented in the next phase.")
+          }
+          onImport={() =>
+            showSuccess("Import feature will be implemented in the next phase.")
+          }
         />
 
-        {successMessage && (
+        {successMessage ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-700">
             {successMessage}
           </div>
-        )}
+        ) : null}
 
-        {errorMessage && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">
+        {errorMessage ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-700">
             {errorMessage}
           </div>
-        )}
+        ) : null}
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-5">
-            <h2 className="text-xl font-black text-slate-900">Roles</h2>
-            <p className="text-sm text-slate-500">
-              Manage role records with backend-driven pagination.
-            </p>
-          </div>
-
-          <DataTableToolbar
+        <section className="overflow-hidden rounded-3xl border border-sky-100 bg-white shadow-sm shadow-sky-100/60">
+          <CrudToolbar
             pageSize={pageSize}
-            searchTerm={searchTerm}
-            statusFilter={statusFilter}
-            searchPlaceholder="Search role."
-            onPageSizeChange={handlePageSizeChange}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
+            onPageSizeChange={(value) => {
+              setPageSize(value as CrudPageSizeOption);
+              setPage(1);
+            }}
+            onRefresh={() => void loadRoles(true)}
+            onReset={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+              setPage(1);
+            }}
+            filters={[
+              {
+                key: "search",
+                label: "Search",
+                type: "search",
+                value: searchTerm,
+                placeholder: "Search role.",
+                onChange: (value) => {
+                  setSearchTerm(value);
+                  setPage(1);
+                },
+              },
+              {
+                key: "status",
+                label: "Status",
+                type: "select",
+                value: statusFilter,
+                options: [
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ],
+                onChange: (value) => {
+                  setStatusFilter(value as StatusFilter);
+                  setPage(1);
+                },
+              },
+            ]}
           />
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-900px w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <thead className="bg-sky-50/60">
                 <tr>
-                  <th className="px-5 py-4 font-bold">SL</th>
-                  <th className="px-5 py-4 font-bold">Role Name</th>
-                  <th className="px-5 py-4 font-bold">Description</th>
-                  <th className="px-5 py-4 font-bold">Status</th>
-                  <th className="px-5 py-4 font-bold">Created At</th>
-                  <th className="px-5 py-4 text-right font-bold">Action</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">SL</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Role Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Description</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Created At</th>
+                  <th className="px-6 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Action</th>
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-16 text-center text-slate-400"
-                    >
+                    <td colSpan={6} className="px-5 py-16 text-center text-slate-400">
                       Loading roles...
                     </td>
                   </tr>
                 ) : roles.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-16 text-center text-slate-400"
-                    >
+                    <td colSpan={6} className="px-5 py-16 text-center text-slate-400">
                       No role data found.
                     </td>
                   </tr>
@@ -391,20 +387,18 @@ function RolesContent() {
                   roles.map((role, index) => (
                     <tr
                       key={role.id}
-                      className={`border-t border-slate-100 hover:bg-slate-50 ${
+                      className={`transition hover:bg-sky-50/50 ${
                         !role.is_active ? "bg-slate-50 opacity-70" : ""
                       }`}
                     >
                       <td className="px-5 py-4 font-semibold text-slate-600">
                         {pageSize === "all"
                           ? index + 1
-                          : (page - 1) * pageSize + index + 1}
+                          : (page - 1) * numericPageSize + index + 1}
                       </td>
 
-                      <td className="px-5 py-4">
-                        <div className="font-bold text-slate-900">
-                          {role.role_name}
-                        </div>
+                      <td className="px-5 py-4 font-black text-slate-950">
+                        {role.role_name}
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
@@ -412,15 +406,7 @@ function RolesContent() {
                       </td>
 
                       <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            role.is_active
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {role.is_active ? "Active" : "Inactive"}
-                        </span>
+                        <CrudStatusBadge active={role.is_active} />
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
@@ -449,20 +435,24 @@ function RolesContent() {
             </table>
           </div>
 
-          <DataTablePagination
-            page={page}
-            pageSize={pageSize}
-            total={totalRecords}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
+          <div className="border-t border-slate-200 px-6 py-5">
+            <CrudPagination
+              page={page}
+              totalPages={totalPages}
+              total={totalRecords}
+              pageSize={numericPageSize}
+              onPageChange={handlePageChange}
+            />
+          </div>
         </section>
       </div>
 
-      <RightDrawer
-        open={drawerOpen}
+      <CrudDrawer
+        isOpen={drawerOpen}
         title={editingRole ? "Edit Role" : "Create Role"}
+        description="Maintain AMS user roles and access responsibility groups."
         onClose={handleCloseDrawer}
+        maxWidthClassName="max-w-2xl"
       >
         <RoleForm
           key={editingRole ? `edit-role-${editingRole.id}` : "create-role"}
@@ -470,7 +460,7 @@ function RolesContent() {
           onSuccess={handleSuccess}
           onCancel={handleCloseDrawer}
         />
-      </RightDrawer>
+      </CrudDrawer>
 
       <ConfirmModal
         open={Boolean(confirmAction && selectedRole)}
@@ -482,7 +472,7 @@ function RolesContent() {
         onConfirm={handleConfirmAction}
         onClose={closeConfirm}
       />
-    </DashboardLayout>
+    </>
   );
 }
 

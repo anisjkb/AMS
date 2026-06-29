@@ -1,4 +1,4 @@
-// E:\Audit\AMS\frontend\src\app\security\users\page.tsx
+// E:\Audit\AMS\frontend\src\app\(protected)\security\users\page.tsx
 
 "use client";
 
@@ -6,22 +6,26 @@ import { useCallback, useEffect, useState } from "react";
 import { UsersRound } from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
-import DataTablePagination from "@/components/common/DataTablePagination";
-import DataTableToolbar from "@/components/common/DataTableToolbar";
+import ModuleHero from "@/components/common/ModuleHero";
 import PageActionBar from "@/components/common/PageActionBar";
-import RightDrawer from "@/components/common/RightDrawer";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import CrudDrawer from "@/components/crud/CrudDrawer";
+import CrudPagination from "@/components/crud/CrudPagination";
+import { CrudPillBadge, CrudStatusBadge } from "@/components/crud/CrudStatusBadge";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import UserForm from "@/components/users/UserForm";
 import UserRowActions from "@/components/users/UserRowActions";
-
 import {
   deactivateUser,
   getAllUsers,
   getUsers,
   restoreUser,
 } from "@/services/user";
+import type { StatusFilter } from "@/types/pagination";
 import type { User } from "@/types/user";
-import type { PageSizeOption, StatusFilter } from "@/types/pagination";
 
 type ConfirmAction = "inactive" | "restore";
 type ConfirmVariant = "danger" | "warning" | "success";
@@ -32,14 +36,13 @@ function UsersContent() {
   const [totalPages, setTotalPages] = useState(0);
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] =
+    useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -47,6 +50,12 @@ function UsersContent() {
     null
   );
   const [confirmLoading, setConfirmLoading] = useState(false);
+
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const numericPageSize =
+    pageSize === "all" ? Math.max(totalRecords, 1) : Number(pageSize);
 
   const showSuccess = useCallback((message: string) => {
     setSuccessMessage(message);
@@ -67,7 +76,7 @@ function UsersContent() {
   }, []);
 
   const loadUsers = useCallback(
-    async (showPageLoading = false) => {
+    async (showPageLoading = true) => {
       try {
         if (showPageLoading) {
           setLoading(true);
@@ -83,7 +92,7 @@ function UsersContent() {
               })
             : await getUsers({
                 page,
-                pageSize,
+                pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
                 search: searchTerm,
                 status: statusFilter,
                 sortBy: "id",
@@ -121,7 +130,7 @@ function UsersContent() {
           })
         : getUsers({
             page,
-            pageSize,
+            pageSize: Number(pageSize) as 10 | 20 | 30 | 40 | 50 | 100,
             search: searchTerm,
             status: statusFilter,
             sortBy: "id",
@@ -155,27 +164,6 @@ function UsersContent() {
     };
   }, [page, pageSize, searchTerm, statusFilter, showError]);
 
-  const handlePageSizeChange = (nextPageSize: PageSizeOption) => {
-    setPageSize(nextPageSize);
-    setPage(1);
-  };
-
-  const handleSearchChange = (nextSearchTerm: string) => {
-    setSearchTerm(nextSearchTerm);
-    setPage(1);
-  };
-
-  const handleStatusChange = (nextStatus: StatusFilter) => {
-    setStatusFilter(nextStatus);
-    setPage(1);
-  };
-
-  const handlePageChange = (nextPage: number) => {
-    if (nextPage < 1 || nextPage > totalPages) return;
-
-    setPage(nextPage);
-  };
-
   const handleCreate = () => {
     setEditingUser(null);
     setDrawerOpen(true);
@@ -184,14 +172,6 @@ function UsersContent() {
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setDrawerOpen(true);
-  };
-
-  const handleExport = () => {
-    showSuccess("Export feature will be implemented in the next phase.");
-  };
-
-  const handleImport = () => {
-    showSuccess("Import feature will be implemented in the next phase.");
   };
 
   const handleCloseDrawer = () => {
@@ -205,10 +185,7 @@ function UsersContent() {
     setDrawerOpen(false);
     setEditingUser(null);
 
-    showSuccess(
-      wasEditing ? "User updated successfully." : "User created successfully."
-    );
-
+    showSuccess(wasEditing ? "User updated successfully." : "User created successfully.");
     void loadUsers(false);
   };
 
@@ -225,9 +202,7 @@ function UsersContent() {
   };
 
   const handleConfirmAction = async () => {
-    if (!selectedUser || !confirmAction) {
-      return;
-    }
+    if (!selectedUser || !confirmAction) return;
 
     try {
       setConfirmLoading(true);
@@ -288,91 +263,112 @@ function UsersContent() {
     return "danger";
   };
 
-  return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <section className="rounded-3xl bg-linear-to-r from-slate-900 via-cyan-800 to-blue-700 p-8 text-white shadow-xl">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15">
-              <UsersRound size={34} />
-            </div>
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+    setPage(nextPage);
+  };
 
-            <div>
-              <h1 className="text-3xl font-black">User Management</h1>
-              <p className="mt-1 text-blue-100">
-                Create, update, inactive and restore system users.
-              </p>
-            </div>
-          </div>
-        </section>
+  return (
+    <>
+      <div className="space-y-6">
+        <ModuleHero
+          icon={UsersRound}
+          title="User Management"
+          description="Create, update, deactivate and restore AMS login users and superuser access."
+          height="small"
+        />
 
         <PageActionBar
           menuKey="user"
           onCreate={handleCreate}
-          onExport={handleExport}
-          onImport={handleImport}
+          onExport={() =>
+            showSuccess("Export feature will be implemented in the next phase.")
+          }
+          onImport={() =>
+            showSuccess("Import feature will be implemented in the next phase.")
+          }
         />
 
-        {successMessage && (
+        {successMessage ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-700">
             {successMessage}
           </div>
-        )}
+        ) : null}
 
-        {errorMessage && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">
+        {errorMessage ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-bold text-rose-700">
             {errorMessage}
           </div>
-        )}
+        ) : null}
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-5">
-            <h2 className="text-xl font-black text-slate-900">Users</h2>
-            <p className="text-sm text-slate-500">
-              Manage login users, superuser access and active status.
-            </p>
-          </div>
-
-          <DataTableToolbar
+        <section className="overflow-hidden rounded-3xl border border-sky-100 bg-white shadow-sm shadow-sky-100/60">
+          <CrudToolbar
             pageSize={pageSize}
-            searchTerm={searchTerm}
-            statusFilter={statusFilter}
-            searchPlaceholder="Search user."
-            onPageSizeChange={handlePageSizeChange}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
+            onPageSizeChange={(value) => {
+              setPageSize(value as CrudPageSizeOption);
+              setPage(1);
+            }}
+            onRefresh={() => void loadUsers(true)}
+            onReset={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+              setPage(1);
+            }}
+            filters={[
+              {
+                key: "search",
+                label: "Search",
+                type: "search",
+                value: searchTerm,
+                placeholder: "Search user.",
+                onChange: (value) => {
+                  setSearchTerm(value);
+                  setPage(1);
+                },
+              },
+              {
+                key: "status",
+                label: "Status",
+                type: "select",
+                value: statusFilter,
+                options: [
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ],
+                onChange: (value) => {
+                  setStatusFilter(value as StatusFilter);
+                  setPage(1);
+                },
+              },
+            ]}
           />
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-1100px w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <thead className="bg-sky-50/60">
                 <tr>
-                  <th className="px-5 py-4 font-bold">SL</th>
-                  <th className="px-5 py-4 font-bold">User</th>
-                  <th className="px-5 py-4 font-bold">Email</th>
-                  <th className="px-5 py-4 font-bold">Access</th>
-                  <th className="px-5 py-4 font-bold">Status</th>
-                  <th className="px-5 py-4 font-bold">Created At</th>
-                  <th className="px-5 py-4 text-right font-bold">Action</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">SL</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Access</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Created At</th>
+                  <th className="px-6 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Action</th>
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="px-5 py-16 text-center text-slate-400"
-                    >
+                    <td colSpan={7} className="px-5 py-16 text-center text-slate-400">
                       Loading users...
                     </td>
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="px-5 py-16 text-center text-slate-400"
-                    >
+                    <td colSpan={7} className="px-5 py-16 text-center text-slate-400">
                       No user data found.
                     </td>
                   </tr>
@@ -380,22 +376,21 @@ function UsersContent() {
                   users.map((user, index) => (
                     <tr
                       key={user.id}
-                      className={`border-t border-slate-100 hover:bg-slate-50 ${
+                      className={`transition hover:bg-sky-50/50 ${
                         !user.is_active ? "bg-slate-50 opacity-70" : ""
                       }`}
                     >
                       <td className="px-5 py-4 font-semibold text-slate-600">
                         {pageSize === "all"
                           ? index + 1
-                          : (page - 1) * pageSize + index + 1}
+                          : (page - 1) * numericPageSize + index + 1}
                       </td>
 
                       <td className="px-5 py-4">
-                        <div className="font-bold text-slate-900">
+                        <div className="font-black text-slate-950">
                           {user.full_name}
                         </div>
-
-                        <div className="mt-1 text-xs font-semibold text-slate-500">
+                        <div className="mt-1 text-xs font-bold text-slate-500">
                           Login ID: {user.user_id}
                         </div>
                       </td>
@@ -405,27 +400,13 @@ function UsersContent() {
                       </td>
 
                       <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            user.is_superuser
-                              ? "bg-purple-50 text-purple-700"
-                              : "bg-blue-50 text-blue-700"
-                          }`}
-                        >
+                        <CrudPillBadge>
                           {user.is_superuser ? "Super Admin" : "User"}
-                        </span>
+                        </CrudPillBadge>
                       </td>
 
                       <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            user.is_active
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {user.is_active ? "Active" : "Inactive"}
-                        </span>
+                        <CrudStatusBadge active={user.is_active} />
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
@@ -451,20 +432,24 @@ function UsersContent() {
             </table>
           </div>
 
-          <DataTablePagination
-            page={page}
-            pageSize={pageSize}
-            total={totalRecords}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
+          <div className="border-t border-slate-200 px-6 py-5">
+            <CrudPagination
+              page={page}
+              totalPages={totalPages}
+              total={totalRecords}
+              pageSize={numericPageSize}
+              onPageChange={handlePageChange}
+            />
+          </div>
         </section>
       </div>
 
-      <RightDrawer
-        open={drawerOpen}
+      <CrudDrawer
+        isOpen={drawerOpen}
         title={editingUser ? "Edit User" : "Create User"}
+        description="Maintain AMS users, login identity, email and superuser access."
         onClose={handleCloseDrawer}
+        maxWidthClassName="max-w-3xl"
       >
         <UserForm
           key={editingUser ? `edit-user-${editingUser.id}` : "create-user"}
@@ -472,7 +457,7 @@ function UsersContent() {
           onSuccess={handleSuccess}
           onCancel={handleCloseDrawer}
         />
-      </RightDrawer>
+      </CrudDrawer>
 
       <ConfirmModal
         open={Boolean(confirmAction && selectedUser)}
@@ -484,7 +469,7 @@ function UsersContent() {
         onConfirm={handleConfirmAction}
         onClose={closeConfirm}
       />
-    </DashboardLayout>
+    </>
   );
 }
 
