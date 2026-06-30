@@ -2,17 +2,19 @@
 
 import { login } from "@/services/auth";
 import { useRouter } from "next/navigation";
+import type { FormEvent } from "react";
 import { useState } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [userId, setUserId] = useState("admin");
-  const [password, setPassword] = useState("Admin@12345");
+  const [userId, setUserId] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async () => {
+  const handleLogin = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     if (!userId.trim()) {
       setError("User ID is required.");
       return;
@@ -63,13 +65,15 @@ export default function LoginPage() {
           </div>
         )}
 
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleLogin}>
           <input
             className="w-full rounded border p-3"
             placeholder="User ID"
             value={userId}
             onChange={(event) => setUserId(event.target.value)}
             disabled={loading}
+            autoComplete="username"
+            name="user_id"
           />
 
           <input
@@ -79,22 +83,18 @@ export default function LoginPage() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             disabled={loading}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                handleLogin();
-              }
-            }}
+            autoComplete="current-password"
+            name="password"
           />
 
           <button
-            type="button"
-            onClick={handleLogin}
+            type="submit"
             disabled={loading}
             className="w-full rounded bg-blue-600 p-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
             {loading ? "Logging in..." : "Login"}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
