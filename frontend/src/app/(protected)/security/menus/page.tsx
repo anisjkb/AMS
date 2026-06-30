@@ -131,7 +131,13 @@ function SummaryCard({
 }
 
 function MenusContent() {
-  const { reloadNavigation } = useNavigation();
+  const { hasAction, reloadNavigation } = useNavigation();
+
+  const hasBuilderAction = useCallback(
+    (actionKey: string) => hasAction("menu", actionKey),
+    [hasAction],
+  );
+
 
   const [activeTab, setActiveTab] = useState<BuilderTab>("groups");
 
@@ -1040,6 +1046,10 @@ function MenusContent() {
                     <td className="px-5 py-4 text-right">
                       <NavigationGroupRowActions
                         group={group}
+                        canEdit={hasBuilderAction("group_update")}
+                        canInactive={hasBuilderAction("group_delete")}
+                        canRestore={hasBuilderAction("group_restore")}
+                        canPermanentDelete={hasBuilderAction("group_permanent_delete")}
                         onEdit={(selected) => {
                           setEditingGroup(selected);
                           setDrawerMode("groups");
@@ -1265,6 +1275,10 @@ function MenusContent() {
                     <td className="px-5 py-4 text-right">
                       <MenuRowActions
                         menu={menu}
+                        canEdit={hasBuilderAction("menu_update")}
+                        canInactive={hasBuilderAction("menu_delete")}
+                        canRestore={hasBuilderAction("menu_restore")}
+                        canPermanentDelete={hasBuilderAction("menu_permanent_delete")}
                         onEdit={(selected) => {
                           setEditingMenu(selected);
                           setDrawerMode("menus");
@@ -1487,6 +1501,10 @@ function MenusContent() {
                     <td className="px-5 py-4 text-right">
                       <MenuActionRowActions
                         action={action}
+                        canEdit={hasBuilderAction("action_update")}
+                        canInactive={hasBuilderAction("action_delete")}
+                        canRestore={hasBuilderAction("action_restore")}
+                        canPermanentDelete={hasBuilderAction("action_permanent_delete")}
                         onEdit={(selected) => {
                           setEditingAction(selected);
                           setDrawerMode("actions");
@@ -1560,62 +1578,72 @@ function MenusContent() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("groups");
-                    setEditingGroup(null);
-                    setDrawerMode("groups");
-                  }}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-950/15 transition hover:bg-slate-800"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Group
-                </button>
+                {hasBuilderAction("group_create") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("groups");
+                      setEditingGroup(null);
+                      setDrawerMode("groups");
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-950/15 transition hover:bg-slate-800"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Group
+                  </button>
+                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("menus");
-                    setEditingMenu(null);
-                    setDrawerMode("menus");
-                  }}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/80 px-4 py-2.5 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-sky-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Menu
-                </button>
+                {hasBuilderAction("menu_create") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("menus");
+                      setEditingMenu(null);
+                      setDrawerMode("menus");
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/80 px-4 py-2.5 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-sky-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Menu
+                  </button>
+                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("actions");
-                    setEditingAction(null);
-                    setDrawerMode("actions");
-                  }}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/80 px-4 py-2.5 text-sm font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Action
-                </button>
+                {hasBuilderAction("action_create") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("actions");
+                      setEditingAction(null);
+                      setDrawerMode("actions");
+                    }}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/80 px-4 py-2.5 text-sm font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Action
+                  </button>
+                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => showSuccess("Export feature will be implemented in the next phase.")}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white"
-                >
-                  <Download className="h-4 w-4" />
-                  Export
-                </button>
+                {hasBuilderAction("export") ? (
+                  <button
+                    type="button"
+                    onClick={() => showSuccess("Export feature will be implemented in the next phase.")}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white"
+                  >
+                    <Download className="h-4 w-4" />
+                    Export
+                  </button>
+                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => showSuccess("Import feature will be implemented in the next phase.")}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white"
-                >
-                  <Upload className="h-4 w-4" />
-                  Import
-                </button>
+                {hasBuilderAction("import") ? (
+                  <button
+                    type="button"
+                    onClick={() => showSuccess("Import feature will be implemented in the next phase.")}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-white"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Import
+                  </button>
+                ) : null}
               </div>
             </div>
 
