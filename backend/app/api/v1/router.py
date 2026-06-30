@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.audit_discussion_issues import router as audit_discussion_issues_router
 from app.api.v1.audit_entities import router as audit_entities_router
 from app.api.v1.audit_entity_addresses import router as audit_entity_addresses_router
 from app.api.v1.audit_entity_business_activities import router as audit_entity_business_activities_router
@@ -42,6 +43,7 @@ from app.api.v1.users import router as users_router
 
 api_router = APIRouter()
 
+api_router.include_router(audit_discussion_issues_router)
 api_router.include_router(audit_entities_router)
 api_router.include_router(audit_entity_addresses_router)
 api_router.include_router(audit_entity_business_activities_router)

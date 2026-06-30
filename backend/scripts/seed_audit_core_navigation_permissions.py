@@ -82,6 +82,7 @@ MEETING_CHILD_MENUS = [
         "permission_key": "menu.audit_discussion_issue.view",
         "sort_order": 50,
         "resource_key": "audit_discussion_issue",
+        "initial_is_visible": True,
     },
     {
         "menu_key": "audit_visit_observation",
