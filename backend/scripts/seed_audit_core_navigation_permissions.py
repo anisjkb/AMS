@@ -92,6 +92,7 @@ MEETING_CHILD_MENUS = [
         "permission_key": "menu.audit_visit_observation.view",
         "sort_order": 60,
         "resource_key": "audit_visit_observation",
+        "initial_is_visible": True,
     },
 ]
 

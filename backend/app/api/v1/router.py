@@ -16,6 +16,7 @@ from app.api.v1.audit_subjects import router as audit_subjects_router
 from app.api.v1.audit_team_members import router as audit_team_members_router
 from app.api.v1.audit_teams import router as audit_teams_router
 from app.api.v1.audit_visit_info import router as audit_visit_info_router
+from app.api.v1.audit_visit_observations import router as audit_visit_observations_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.branches import router as branches_router
 from app.api.v1.business_masters import router as business_masters_router
@@ -59,6 +60,7 @@ api_router.include_router(audit_subjects_router)
 api_router.include_router(audit_team_members_router)
 api_router.include_router(audit_teams_router)
 api_router.include_router(audit_visit_info_router)
+api_router.include_router(audit_visit_observations_router)
 api_router.include_router(auth_router)
 api_router.include_router(branches_router)
 api_router.include_router(business_masters_router)
