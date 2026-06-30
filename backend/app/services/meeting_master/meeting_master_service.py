@@ -49,11 +49,28 @@ class MeetingMasterService:
 
         return item
 
+    async def _sync_client_reference(self, client_id: int) -> str:
+        entity = await self.repository.get_active_audit_entity_by_id(client_id)
+
+        if not entity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Selected audit entity is invalid or inactive.",
+            )
+
+        return entity.entity_code
+
     async def create_meeting_master(
         self,
         payload: MeetingMasterCreate,
         created_by: str,
     ):
+        payload = payload.model_copy(
+            update={
+                "client_code": await self._sync_client_reference(payload.client_id),
+            }
+        )
+
         item = await self.repository.create(
             payload=payload,
             created_by=created_by,
@@ -78,6 +95,13 @@ class MeetingMasterService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No update data provided.",
             )
+
+        if "client_id" in update_data:
+            update_data["client_code"] = await self._sync_client_reference(
+                update_data["client_id"]
+            )
+        elif "client_code" in update_data:
+            update_data.pop("client_code")
 
         audit_start_date = update_data.get("audit_start_date", item.audit_start_date)
         audit_end_date = update_data.get("audit_end_date", item.audit_end_date)

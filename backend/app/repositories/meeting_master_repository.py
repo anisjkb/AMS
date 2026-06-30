@@ -1,6 +1,7 @@
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.audit_entity import AuditEntity
 from app.models.meeting_master import MeetingMaster
 from app.schemas.meeting_master import MeetingMasterCreate
 
@@ -107,6 +108,18 @@ class MeetingMasterRepository:
     async def get_by_id(self, meeting_id: int) -> MeetingMaster | None:
         result = await self.db.execute(
             select(MeetingMaster).where(MeetingMaster.meeting_id == meeting_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_active_audit_entity_by_id(
+        self,
+        audit_entity_id: int,
+    ) -> AuditEntity | None:
+        result = await self.db.execute(
+            select(AuditEntity).where(
+                AuditEntity.id == audit_entity_id,
+                AuditEntity.is_active.is_(True),
+            )
         )
         return result.scalar_one_or_none()
 

@@ -22,7 +22,6 @@ import {
   type CrudPageSizeOption,
 } from "@/components/crud/crudConstants";
 import CrudDateField from "@/components/crud/fields/CrudDateField";
-import CrudNumberField from "@/components/crud/fields/CrudNumberField";
 import CrudSelectField from "@/components/crud/fields/CrudSelectField";
 import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
 import CrudTextField from "@/components/crud/fields/CrudTextField";
@@ -36,6 +35,7 @@ import {
   type MeetingMaster,
   type MeetingMasterPayload,
 } from "@/services/meetingMaster";
+import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
 
 type StatusFilter = "all" | "active" | "inactive";
 type DrawerMode = "create" | "edit";
@@ -48,6 +48,7 @@ type PageMessage = {
 
 type FormState = {
   meeting_type: string;
+  entity_type: string;
   client_id: string;
   client_code: string;
   audit_year: string;
@@ -61,6 +62,7 @@ type FormState = {
 
 const emptyForm: FormState = {
   meeting_type: "",
+  entity_type: "",
   client_id: "",
   client_code: "",
   audit_year: "",
@@ -104,6 +106,7 @@ function toTitle(value: string | null | undefined) {
 function buildFormFromItem(item: MeetingMaster): FormState {
   return {
     meeting_type: item.meeting_type,
+    entity_type: "",
     client_id: String(item.client_id),
     client_code: item.client_code,
     audit_year: item.audit_year,
@@ -143,6 +146,10 @@ export default function MeetingMasterPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
+  const [entityTypeOptions, setEntityTypeOptions] = useState<string[]>([]);
+  const [entityOptions, setEntityOptions] = useState<AuditEntity[]>([]);
+  const [entityLoading, setEntityLoading] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [message, setMessage] = useState<PageMessage | null>(null);
@@ -179,7 +186,120 @@ export default function MeetingMasterPage() {
 
   const showTopActions = meetingMasterActions.showTopActions;
   const showRowActions = meetingMasterActions.showRowActions;
-  const tableColumnCount = showRowActions ? 12 : 11;
+  const tableColumnCount = showRowActions ? 11 : 10;
+
+  const loadEntityTypes = useCallback(async () => {
+    try {
+      const response = await listAuditEntities({
+        page: 1,
+        pageSize: 100,
+        isActive: true,
+        sortBy: "entity_type",
+        sortOrder: "asc",
+      });
+
+      const types = Array.from(
+        new Set(
+          response.items
+            .map((item) => item.entity_type)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => left.localeCompare(right));
+
+      setEntityTypeOptions(types);
+    } catch {
+      setEntityTypeOptions([]);
+    }
+  }, []);
+
+  const loadEntityOptions = useCallback(async (entityType: string) => {
+    if (!entityType) {
+      setEntityOptions([]);
+      return;
+    }
+
+    setEntityLoading(true);
+
+    try {
+      const response = await listAuditEntities({
+        page: 1,
+        pageSize: 100,
+        isActive: true,
+        entityType,
+        sortBy: "entity_name",
+        sortOrder: "asc",
+      });
+
+      setEntityOptions(response.items);
+    } catch {
+      setEntityOptions([]);
+    } finally {
+      setEntityLoading(false);
+    }
+  }, []);
+
+  const hydrateSelectedEntityForEdit = useCallback(
+    async (item: MeetingMaster) => {
+      try {
+        const response = await listAuditEntities({
+          page: 1,
+          pageSize: 100,
+          search: item.client_code,
+          isActive: true,
+          sortBy: "entity_name",
+          sortOrder: "asc",
+        });
+
+        const selectedEntity =
+          response.items.find((entity) => entity.id === item.client_id) ??
+          response.items.find((entity) => entity.entity_code === item.client_code);
+
+        if (!selectedEntity) return;
+
+        const sameTypeEntities = response.items.filter(
+          (entity) => entity.entity_type === selectedEntity.entity_type,
+        );
+
+        setEntityOptions(sameTypeEntities.length > 0 ? sameTypeEntities : [selectedEntity]);
+        setForm((current) => ({
+          ...current,
+          entity_type: selectedEntity.entity_type,
+          client_id: String(selectedEntity.id),
+          client_code: selectedEntity.entity_code,
+        }));
+      } catch {
+        setForm((current) => ({
+          ...current,
+          entity_type: "",
+          client_id: String(item.client_id),
+          client_code: item.client_code,
+        }));
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      void loadEntityTypes();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [loadEntityTypes]);
+
+  useEffect(() => {
+    if (!drawerOpen || !form.entity_type) return;
+
+    const timerId = window.setTimeout(() => {
+      void loadEntityOptions(form.entity_type);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [drawerOpen, form.entity_type, loadEntityOptions]);
 
   const loadMeetingMaster = useCallback(async () => {
     setIsLoading(true);
@@ -235,6 +355,7 @@ export default function MeetingMasterPage() {
     setSelectedItem(item);
     setForm(buildFormFromItem(item));
     setDrawerOpen(true);
+    void hydrateSelectedEntityForEdit(item);
   };
 
   const closeDrawer = () => {
@@ -260,8 +381,9 @@ export default function MeetingMasterPage() {
   const validateForm = () => {
     const requiredFields: Array<[keyof FormState, string]> = [
       ["meeting_type", "Meeting type is required."],
-      ["client_id", "Client ID is required."],
-      ["client_code", "Client code is required."],
+      ["entity_type", "Entity type is required."],
+      ["client_id", "Client / Entity is required."],
+      ["client_code", "Client / Entity code is required."],
       ["audit_year", "Audit year is required."],
       ["meeting_date", "Meeting date is required."],
       ["audit_start_date", "Audit start date is required."],
@@ -694,24 +816,54 @@ export default function MeetingMasterPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <CrudNumberField
-              label="Client ID"
-              value={form.client_id}
-              required
-              placeholder="Example: 1001"
+            <CrudSelectField
+              label="Entity Type"
+              value={form.entity_type}
+              options={[
+                { value: "", label: "Select Entity Type" },
+                ...entityTypeOptions.map((type) => ({
+                  value: type,
+                  label: toTitle(type),
+                })),
+              ]}
               onChange={(value) =>
-                setForm((current) => ({ ...current, client_id: value }))
+                setForm((current) => ({
+                  ...current,
+                  entity_type: value,
+                  client_id: "",
+                  client_code: "",
+                }))
               }
             />
 
-            <CrudTextField
-              label="Client Code"
-              value={form.client_code}
-              required
-              placeholder="Example: C001"
-              onChange={(value) =>
-                setForm((current) => ({ ...current, client_code: value }))
-              }
+            <CrudSelectField
+              label="Client / Entity"
+              value={form.client_id}
+              options={[
+                {
+                  value: "",
+                  label: entityLoading
+                    ? "Loading entities..."
+                    : form.entity_type
+                      ? "Select Entity"
+                      : "Select Entity Type First",
+                },
+                ...entityOptions.map((entity) => ({
+                  value: String(entity.id),
+                  label: `${entity.entity_name} (${entity.entity_code})`,
+                })),
+              ]}
+              onChange={(value) => {
+                const selectedEntity = entityOptions.find(
+                  (entity) => String(entity.id) === value,
+                );
+
+                setForm((current) => ({
+                  ...current,
+                  client_id: value,
+                  client_code: selectedEntity?.entity_code ?? "",
+                }));
+              }}
             />
 
             <CrudTextField
@@ -724,6 +876,12 @@ export default function MeetingMasterPage() {
               }
             />
           </div>
+
+          {form.client_code ? (
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+              Selected Entity Code: {form.client_code}
+            </div>
+          ) : null}
 
           <div className="grid gap-4 md:grid-cols-3">
             <CrudDateField
