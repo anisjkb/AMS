@@ -80,7 +80,7 @@ function SidebarMenuItem({
   const hasActiveChild = children.some((child) =>
     menuHasActivePath(child, pathname)
   );
-  const isOpen = hasActiveChild || Boolean(openMenus[menu.menu_key]);
+  const isOpen = openMenus[menu.menu_key] ?? hasActiveChild;
   const actionCount = menu.actions.length;
   const activeLike = isActive || hasActiveChild;
 
@@ -253,8 +253,7 @@ function SidebarContent({
       <nav className="space-y-3 p-4">
         {navigation.map((group) => {
           const isOpen =
-            Boolean(openGroups[group.group_key]) ||
-            Boolean(activeOpenGroups[group.group_key]);
+            openGroups[group.group_key] ?? Boolean(activeOpenGroups[group.group_key]);
           const hasActiveGroup = groupHasActivePath(group, pathname);
           const totalMenus = countMenus(group.menus);
 
