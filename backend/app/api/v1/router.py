@@ -26,6 +26,7 @@ from app.api.v1.employees import router as employees_router
 
 from app.api.v1.meeting_master import router as meeting_master_router
 from app.api.v1.meeting_reports import router as meeting_reports_router
+from app.api.v1.meeting_participants import router as meeting_participants_router
 from app.api.v1.audit_subjects import router as audit_subjects_router
 from app.api.v1.audit_entities import router as audit_entities_router
 from app.api.v1.audit_entity_business_activities import (
@@ -85,6 +86,7 @@ api_router.include_router(employees_router)
 
 api_router.include_router(meeting_master_router)
 api_router.include_router(meeting_reports_router)
+api_router.include_router(meeting_participants_router)
 api_router.include_router(audit_subjects_router)
 api_router.include_router(audit_entities_router)
 api_router.include_router(audit_entity_business_activities_router)
