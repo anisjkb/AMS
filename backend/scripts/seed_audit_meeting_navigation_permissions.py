@@ -563,8 +563,8 @@ async def seed_audit_meeting_navigation_permissions() -> None:
                 menu_data={
                     **child_data,
                     "is_expandable": False,
-                    "initial_is_visible": child_data["menu_key"] == "meeting_master",
-                    "is_visible": child_data["menu_key"] == "meeting_master",
+                    "initial_is_visible": child_data["menu_key"] in {"meeting_master", "meeting_report"},
+                    "is_visible": child_data["menu_key"] in {"meeting_master", "meeting_report"},
                 },
                 menu_level=3,
             )

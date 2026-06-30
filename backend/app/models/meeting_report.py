@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import Date, Integer, String
+from sqlalchemy import Date, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import ActiveStatusMixin, AuditMixin, Base
@@ -14,6 +14,13 @@ class MeetingReport(ActiveStatusMixin, AuditMixin, Base):
         primary_key=True,
         index=True,
         autoincrement=True,
+    )
+
+    meeting_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("meeting_master.meeting_id", ondelete="RESTRICT"),
+        index=True,
+        nullable=True,
     )
 
     meeting_type: Mapped[str] = mapped_column(
