@@ -29,7 +29,7 @@ MEETING_PARENT_MENU = {
     "sort_order": 50,
     "menu_level": 2,
     "is_expandable": True,
-    "initial_is_visible": False,
+    "initial_is_visible": True,
 }
 
 
@@ -327,6 +327,10 @@ async def get_or_create_menu(
         menu.menu_level = menu_level
         menu.is_expandable = menu_data.get("is_expandable", False)
         menu.is_active = True
+        if "is_visible" in menu_data:
+            menu.is_visible = menu_data["is_visible"]
+        elif "initial_is_visible" in menu_data:
+            menu.is_visible = menu_data["initial_is_visible"]
         menu.updated_by = SYSTEM_USER
 
         print(f"Menu updated: {menu.menu_key}")
@@ -556,7 +560,12 @@ async def seed_audit_meeting_navigation_permissions() -> None:
                 db=db,
                 group_id=group.id,
                 parent_menu_id=meeting_parent.id,
-                menu_data={**child_data, "is_expandable": False, "initial_is_visible": False},
+                menu_data={
+                    **child_data,
+                    "is_expandable": False,
+                    "initial_is_visible": child_data["menu_key"] == "meeting_master",
+                    "is_visible": child_data["menu_key"] == "meeting_master",
+                },
                 menu_level=3,
             )
 
