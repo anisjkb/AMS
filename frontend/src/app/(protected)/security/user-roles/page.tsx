@@ -6,8 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ShieldCheck, UserRoundCog, XCircle } from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
-import DataTablePagination from "@/components/common/DataTablePagination";
-import DataTableToolbar from "@/components/common/DataTableToolbar";
+import CrudPagination from "@/components/crud/CrudPagination";
+import { CrudStatusBadge } from "@/components/crud/CrudStatusBadge";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import ModuleHero from "@/components/common/ModuleHero";
 import PageActionBar from "@/components/common/PageActionBar";
 
@@ -19,7 +24,7 @@ import {
   removeUserRole,
 } from "@/services/userRole";
 
-import type { PageSizeOption, StatusFilter } from "@/types/pagination";
+import type { StatusFilter } from "@/types/pagination";
 import type { Role } from "@/types/role";
 import type { User } from "@/types/user";
 import type { UserRole } from "@/types/userRole";
@@ -33,7 +38,8 @@ function UserRolesContent() {
   const [selectedRoleId, setSelectedRoleId] = useState("");
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] =
+    useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -209,19 +215,25 @@ function UserRolesContent() {
 
   const totalRecords = filteredAssignedRoles.length;
 
+  const numericPageSize =
+    pageSize === "all" ? Math.max(totalRecords, 1) : Number(pageSize);
+
   const totalPages =
     pageSize === "all" || totalRecords === 0
       ? 1
-      : Math.ceil(totalRecords / pageSize);
+      : Math.ceil(totalRecords / numericPageSize);
 
   const visibleAssignedRoles = useMemo(() => {
     if (pageSize === "all") {
       return filteredAssignedRoles;
     }
 
-    const startIndex = (page - 1) * pageSize;
-    return filteredAssignedRoles.slice(startIndex, startIndex + pageSize);
-  }, [filteredAssignedRoles, page, pageSize]);
+    const startIndex = (page - 1) * numericPageSize;
+    return filteredAssignedRoles.slice(
+      startIndex,
+      startIndex + numericPageSize
+    );
+  }, [filteredAssignedRoles, page, pageSize, numericPageSize]);
 
   const selectedUser = users.find((user) => String(user.id) === selectedUserId);
 
@@ -297,7 +309,7 @@ function UserRolesContent() {
     }
   };
 
-  const handlePageSizeChange = (nextPageSize: PageSizeOption) => {
+  const handlePageSizeChange = (nextPageSize: CrudPageSizeOption) => {
     setPageSize(nextPageSize);
     setPage(1);
   };
@@ -427,14 +439,44 @@ function UserRolesContent() {
             </div>
           </div>
 
-          <DataTableToolbar
+          <CrudToolbar
             pageSize={pageSize}
-            searchTerm={searchTerm}
-            statusFilter={statusFilter}
-            searchPlaceholder="Search assigned role."
-            onPageSizeChange={handlePageSizeChange}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
+            onPageSizeChange={(value) =>
+              handlePageSizeChange(value as CrudPageSizeOption)
+            }
+            onRefresh={() => {
+              if (selectedUserIdNumber) {
+                void loadAssignedRoles(selectedUserIdNumber, true);
+              }
+            }}
+            onReset={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+              setPage(1);
+            }}
+            filters={[
+              {
+                key: "search",
+                label: "Search",
+                type: "search",
+                value: searchTerm,
+                placeholder: "Search assigned role.",
+                onChange: handleSearchChange,
+              },
+              {
+                key: "status",
+                label: "Status",
+                type: "select",
+                value: statusFilter,
+                options: [
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ],
+                onChange: (value) => handleStatusChange(value as StatusFilter),
+              },
+            ]}
           />
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
@@ -489,7 +531,7 @@ function UserRolesContent() {
                       <td className="px-5 py-4 font-semibold text-slate-600">
                         {pageSize === "all"
                           ? index + 1
-                          : (page - 1) * pageSize + index + 1}
+                          : (page - 1) * numericPageSize + index + 1}
                       </td>
 
                       <td className="px-5 py-4 font-bold text-slate-900">
@@ -501,15 +543,7 @@ function UserRolesContent() {
                       </td>
 
                       <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            userRole.is_active
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {userRole.is_active ? "Active" : "Inactive"}
-                        </span>
+                        <CrudStatusBadge active={userRole.is_active} />
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
@@ -533,13 +567,15 @@ function UserRolesContent() {
             </table>
           </div>
 
-          <DataTablePagination
-            page={page}
-            pageSize={pageSize}
-            total={totalRecords}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
+          <div className="border-t border-slate-200">
+            <CrudPagination
+              page={page}
+              pageSize={numericPageSize}
+              total={totalRecords}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          </div>
         </section>
       </div>
 

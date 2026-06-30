@@ -7,8 +7,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Menu as MenuIcon, ShieldCheck, XCircle } from "lucide-react";
 
 import ConfirmModal from "@/components/common/ConfirmModal";
-import DataTablePagination from "@/components/common/DataTablePagination";
-import DataTableToolbar from "@/components/common/DataTableToolbar";
+import CrudPagination from "@/components/crud/CrudPagination";
+import { CrudStatusBadge } from "@/components/crud/CrudStatusBadge";
+import CrudToolbar from "@/components/crud/CrudToolbar";
+import {
+  DEFAULT_CRUD_PAGE_SIZE,
+  type CrudPageSizeOption,
+} from "@/components/crud/crudConstants";
 import ModuleHero from "@/components/common/ModuleHero";
 import PageActionBar from "@/components/common/PageActionBar";
 
@@ -24,7 +29,7 @@ import type {
   MenuLookup,
   MenuPermission,
 } from "@/types/menuPermission";
-import type { PageSizeOption, StatusFilter } from "@/types/pagination";
+import type { StatusFilter } from "@/types/pagination";
 import type { Permission } from "@/types/permission";
 
 function MenuPermissionsContent() {
@@ -38,7 +43,8 @@ function MenuPermissionsContent() {
   const [selectedPermissionId, setSelectedPermissionId] = useState("");
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [pageSize, setPageSize] =
+    useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -217,19 +223,25 @@ function MenuPermissionsContent() {
 
   const totalRecords = filteredAssignedPermissions.length;
 
+  const numericPageSize =
+    pageSize === "all" ? Math.max(totalRecords, 1) : Number(pageSize);
+
   const totalPages =
     pageSize === "all" || totalRecords === 0
       ? 1
-      : Math.ceil(totalRecords / pageSize);
+      : Math.ceil(totalRecords / numericPageSize);
 
   const visibleAssignedPermissions = useMemo(() => {
     if (pageSize === "all") {
       return filteredAssignedPermissions;
     }
 
-    const startIndex = (page - 1) * pageSize;
-    return filteredAssignedPermissions.slice(startIndex, startIndex + pageSize);
-  }, [filteredAssignedPermissions, page, pageSize]);
+    const startIndex = (page - 1) * numericPageSize;
+    return filteredAssignedPermissions.slice(
+      startIndex,
+      startIndex + numericPageSize
+    );
+  }, [filteredAssignedPermissions, page, pageSize, numericPageSize]);
 
   const selectedMenu = menus.find((menu) => String(menu.id) === selectedMenuId);
 
@@ -348,7 +360,7 @@ function MenuPermissionsContent() {
     }
   };
 
-  const handlePageSizeChange = (nextPageSize: PageSizeOption) => {
+  const handlePageSizeChange = (nextPageSize: CrudPageSizeOption) => {
     setPageSize(nextPageSize);
     setPage(1);
   };
@@ -484,18 +496,48 @@ function MenuPermissionsContent() {
             </div>
           </div>
 
-          <DataTableToolbar
+          <CrudToolbar
             pageSize={pageSize}
-            searchTerm={searchTerm}
-            statusFilter={statusFilter}
-            searchPlaceholder="Search assigned permission."
-            onPageSizeChange={handlePageSizeChange}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
+            onPageSizeChange={(value) =>
+              handlePageSizeChange(value as CrudPageSizeOption)
+            }
+            onRefresh={() => {
+              if (selectedMenuIdNumber) {
+                void loadAssignedPermissions(selectedMenuIdNumber, true);
+              }
+            }}
+            onReset={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setPageSize(DEFAULT_CRUD_PAGE_SIZE);
+              setPage(1);
+            }}
+            filters={[
+              {
+                key: "search",
+                label: "Search",
+                type: "search",
+                value: searchTerm,
+                placeholder: "Search assigned permission.",
+                onChange: handleSearchChange,
+              },
+              {
+                key: "status",
+                label: "Status",
+                type: "select",
+                value: statusFilter,
+                options: [
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ],
+                onChange: (value) => handleStatusChange(value as StatusFilter),
+              },
+            ]}
           />
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-7x w-full text-left text-sm">
+            <table className="min-w-full w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   <th className="px-5 py-4 font-bold">SL</th>
@@ -550,7 +592,7 @@ function MenuPermissionsContent() {
                       <td className="px-5 py-4 font-semibold text-slate-600">
                         {pageSize === "all"
                           ? index + 1
-                          : (page - 1) * pageSize + index + 1}
+                          : (page - 1) * numericPageSize + index + 1}
                       </td>
 
                       <td className="px-5 py-4 font-bold text-slate-900">
@@ -572,15 +614,7 @@ function MenuPermissionsContent() {
                       </td>
 
                       <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            menuPermission.is_active
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {menuPermission.is_active ? "Active" : "Inactive"}
-                        </span>
+                        <CrudStatusBadge active={menuPermission.is_active} />
                       </td>
 
                       <td className="px-5 py-4 text-slate-600">
@@ -606,13 +640,15 @@ function MenuPermissionsContent() {
             </table>
           </div>
 
-          <DataTablePagination
-            page={page}
-            pageSize={pageSize}
-            total={totalRecords}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
+          <div className="border-t border-slate-200">
+            <CrudPagination
+              page={page}
+              pageSize={numericPageSize}
+              total={totalRecords}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          </div>
         </section>
       </div>
 
