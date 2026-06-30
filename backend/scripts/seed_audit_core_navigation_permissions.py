@@ -52,6 +52,7 @@ MEETING_CHILD_MENUS = [
         "permission_key": "menu.audit_team.view",
         "sort_order": 20,
         "resource_key": "audit_team",
+        "initial_is_visible": True,
     },
     {
         "menu_key": "audit_team_member",
