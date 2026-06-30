@@ -68,10 +68,11 @@ MEETING_CHILD_MENUS = [
         "menu_key": "audit_visit_info",
         "menu_title": "Audit Visit Info",
         "route_path": "/audit-core/visit-info",
-        "icon": "MapPinned",
+        "icon": "CalendarDays",
         "permission_key": "menu.audit_visit_info.view",
         "sort_order": 40,
         "resource_key": "audit_visit_info",
+        "initial_is_visible": True,
     },
     {
         "menu_key": "audit_discussion_issue",

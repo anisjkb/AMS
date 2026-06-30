@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Circle,
   ClipboardCheck,
+  ClipboardList,
   Contact,
   Database,
   Download,
@@ -44,6 +45,7 @@ import {
   Upload,
   UserCheck,
   UserCog,
+  UserRoundCog,
   Users,
   UsersRound,
 } from "lucide-react";
@@ -61,6 +63,7 @@ export const iconMap = {
   ChevronRight,
   Circle,
   ClipboardCheck,
+  ClipboardList,
   Contact,
   Database,
   Download,
@@ -89,6 +92,7 @@ export const iconMap = {
   Upload,
   UserCheck,
   UserCog,
+  UserRoundCog,
   Users,
   UsersRound,
 
