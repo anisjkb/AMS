@@ -43,6 +43,13 @@ from app.models.audit_entity_financial_snapshot import (
 from app.models.audit_entity_tax_assessment import (
     AuditEntityTaxAssessment,
 )
+from app.models.meeting_master import MeetingMaster
+from app.models.meeting_report import MeetingReport
+from app.models.meeting_participant import MeetingParticipant
+from app.models.general_discussion import GeneralDiscussion
+from app.models.business_discussion import BusinessDiscussion
+from app.models.cooperation_agreement import CooperationAgreement
+from app.models.auditor_work_plan import AuditorWorkPlan
 from app.models.legal_status import LegalStatus
 from app.models.business_master import (
     BusinessIndustry,
@@ -82,6 +89,13 @@ __all__ = [
     "AuditEntityFacilityType",
     "AuditEntityFinancialSnapshot",
     "AuditEntityTaxAssessment",
+    "MeetingMaster",
+    "MeetingReport",
+    "MeetingParticipant",
+    "GeneralDiscussion",
+    "BusinessDiscussion",
+    "CooperationAgreement",
+    "AuditorWorkPlan",
     "LegalStatus",
     "BusinessNature",
     "BusinessSector",
