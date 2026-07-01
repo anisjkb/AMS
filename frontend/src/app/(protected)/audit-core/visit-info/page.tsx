@@ -23,9 +23,9 @@ import {
 } from "@/components/crud/crudConstants";
 import CrudDateField from "@/components/crud/fields/CrudDateField";
 import CrudSelectField from "@/components/crud/fields/CrudSelectField";
-import CrudTextField from "@/components/crud/fields/CrudTextField";
 import { listAuditMaster, type AuditMaster } from "@/services/auditMaster";
 import { listAuditTeams, type AuditTeam } from "@/services/auditTeam";
+import { listAuditEntityAddresses, type AuditEntityAddress } from "@/services/auditEntityAddress";
 import {
   createAuditVisitInfo,
   deactivateAuditVisitInfo,
@@ -44,6 +44,18 @@ type ConfirmAction = "delete" | "restore" | "permanent_delete";
 type PageMessage = {
   type: "success" | "error";
   text: string;
+};
+
+const formatClientAddressOptionLabel = (address: AuditEntityAddress): string => {
+  const parts = [
+    address.address_line1,
+    address.city,
+    address.country,
+  ].filter(Boolean);
+
+  const label = parts.length > 0 ? parts.join(", ") : "Client Address";
+
+  return `${label} (#${address.id})`;
 };
 
 type FormState = {
@@ -132,6 +144,7 @@ export default function AuditVisitInfoPage() {
 
   const [auditOptions, setAuditOptions] = useState<AuditMaster[]>([]);
   const [teamOptions, setTeamOptions] = useState<AuditTeam[]>([]);
+  const [clientAddresses, setClientAddresses] = useState<AuditEntityAddress[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -188,6 +201,23 @@ export default function AuditVisitInfoPage() {
     return teamMap.get(Number.parseInt(form.team_id, 10)) ?? null;
   }, [form.team_id, teamMap]);
 
+  const clientAddressSelectOptions = useMemo(() => {
+    if (!selectedAudit) {
+      return [];
+    }
+
+    return clientAddresses
+      .filter(
+        (address) =>
+          address.is_active === true &&
+          Number(address.audit_entity_id) === Number(selectedAudit.client_id),
+      )
+      .map((address) => ({
+        label: formatClientAddressOptionLabel(address),
+        value: String(address.id),
+      }));
+  }, [clientAddresses, selectedAudit]);
+
   const showTopActions = auditVisitInfoActions.showTopActions;
   const showRowActions = auditVisitInfoActions.showRowActions;
   const tableColumnCount = showRowActions ? 9 : 8;
@@ -224,7 +254,7 @@ export default function AuditVisitInfoPage() {
     setCatalogLoading(true);
 
     try {
-      const [auditResponse, teamResponse] = await Promise.all([
+      const [auditResponse, teamResponse, addressResponse] = await Promise.all([
         listAuditMaster({
           page: 1,
           pageSize: 100,
@@ -235,13 +265,20 @@ export default function AuditVisitInfoPage() {
           pageSize: 100,
           isActive: true,
         }),
+        listAuditEntityAddresses({
+          page: 1,
+          pageSize: 100,
+          isActive: true,
+        }),
       ]);
 
       setAuditOptions(auditResponse.items);
       setTeamOptions(teamResponse.items);
+      setClientAddresses(addressResponse.items);
     } catch {
       setAuditOptions([]);
       setTeamOptions([]);
+      setClientAddresses([]);
     } finally {
       setCatalogLoading(false);
     }
@@ -319,12 +356,12 @@ export default function AuditVisitInfoPage() {
     }
 
     if (!form.client_address_id.trim()) {
-      setMessage({ type: "error", text: "Client Address ID is required." });
+      setMessage({ type: "error", text: "Client Address is required." });
       return false;
     }
 
     if (Number.isNaN(Number.parseInt(form.client_address_id, 10))) {
-      setMessage({ type: "error", text: "Client Address ID must be a number." });
+      setMessage({ type: "error", text: "Client Address must be selected." });
       return false;
     }
 
@@ -739,6 +776,7 @@ export default function AuditVisitInfoPage() {
               setForm((current) => ({
                 ...current,
                 audit_id: value,
+                      client_address_id: "",
                 visit_date: "",
               }))
             }
@@ -770,15 +808,25 @@ export default function AuditVisitInfoPage() {
               }
             />
 
-            <CrudTextField
-              label="Client Address ID"
+            <CrudSelectField
+              label="Client Address"
               value={form.client_address_id}
               required
-              placeholder="Example: 1"
+              options={[
+                {
+                  label: form.audit_id
+                    ? catalogLoading
+                      ? "Loading Client Addresses..."
+                      : "Select Client Address"
+                    : "Select Audit Master first",
+                  value: "",
+                },
+                ...clientAddressSelectOptions,
+              ]}
               onChange={(value) =>
                 setForm((current) => ({
                   ...current,
-                  client_address_id: value.replace(/[^0-9]/g, ""),
+                  client_address_id: value,
                 }))
               }
             />

@@ -6,6 +6,8 @@ First, run the development server:
 
 ```bash
 npm run dev
+uvicorn main:app --reload
+
 # or
 yarn dev
 # or
