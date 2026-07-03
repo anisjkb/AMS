@@ -125,3 +125,6 @@ screenshot_*.png
 
 # Gitignore local backup
 .gitignore.backup
+
+# Temporary backup files created during AMS patching
+*.bak_*
