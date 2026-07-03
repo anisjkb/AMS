@@ -23,57 +23,22 @@ const highlights = [
   "Professional enterprise experience",
 ];
 
-function BrandLogo() {
+function AmsLogo({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3 xl:gap-4">
-      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 text-white shadow-xl shadow-blue-500/25 ring-1 ring-white/30 xl:h-16 xl:w-16">
-        <ShieldCheck className="h-7 w-7 xl:h-8 xl:w-8" />
+    <div className="flex items-center gap-4">
+      <div
+        className={`flex shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 text-white shadow-xl shadow-blue-500/25 ring-1 ring-white/40 ${
+          compact ? "h-14 w-14" : "h-16 w-16"
+        }`}
+      >
+        <ShieldCheck className={compact ? "h-7 w-7" : "h-8 w-8"} />
       </div>
 
       <div>
-        <h1 className="text-2xl font-black tracking-tight text-white xl:text-3xl">
-          AMS
-        </h1>
-        <p className="text-xs font-semibold text-blue-100 xl:text-sm">
+        <h1 className="text-3xl font-black tracking-tight text-white">AMS</h1>
+        <p className="text-sm font-medium text-blue-100">
           Audit Management System
         </p>
-      </div>
-    </div>
-  );
-}
-
-function MobileBrandBand() {
-  return (
-    <div className="mb-4 lg:hidden">
-      <div className="relative overflow-hidden rounded-[26px] border border-white/70 bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-700 px-4 py-4 text-white shadow-2xl shadow-blue-500/25 sm:px-5 sm:py-5">
-        <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/20 blur-2xl" />
-        <div className="absolute -bottom-12 left-8 h-28 w-28 rounded-full bg-cyan-300/20 blur-2xl" />
-
-        <div className="relative z-10 flex items-center gap-3 sm:gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl bg-white/15 text-white shadow-xl ring-1 ring-white/30 backdrop-blur sm:h-16 sm:w-16">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-lg sm:h-12 sm:w-12">
-              <ShieldCheck className="h-6 w-6 sm:h-7 sm:w-7" />
-            </div>
-          </div>
-
-          <div className="min-w-0 text-left">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
-                AMS
-              </h1>
-              <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-50 ring-1 ring-white/20">
-                Secure
-              </span>
-            </div>
-
-            <p className="mt-0.5 text-sm font-semibold text-blue-50 sm:text-base">
-              Audit Management System
-            </p>
-            <p className="mt-0.5 text-xs font-medium text-blue-100/85 sm:text-sm">
-              Enterprise audit workspace access
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -147,36 +112,36 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative h-[100dvh] overflow-hidden bg-slate-100">
+    <main className="relative h-screen overflow-hidden bg-slate-100">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.18),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(79,70,229,0.14),_transparent_30%)]" />
       <div className="absolute -left-24 top-12 h-72 w-72 rounded-full bg-blue-200/50 blur-3xl" />
       <div className="absolute right-0 top-0 h-80 w-80 rounded-full bg-indigo-200/40 blur-3xl" />
 
-      <div className="relative z-10 flex h-[100dvh] items-center justify-center p-2 sm:p-3 lg:p-5">
-        <div className="grid h-[calc(100dvh-16px)] w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_26px_60px_rgba(15,23,42,0.15)] sm:h-[calc(100dvh-24px)] lg:h-[min(760px,calc(100dvh-40px))] lg:grid-cols-[1.02fr_0.98fr]">
-          <section className="relative hidden overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-8 py-8 text-white lg:flex lg:flex-col">
+      <div className="relative z-10 flex h-screen items-center justify-center p-4">
+        <div className="grid h-[calc(100vh-32px)] max-h-[720px] w-full max-w-6xl overflow-hidden rounded-[30px] border border-white/70 bg-white shadow-[0_28px_70px_rgba(15,23,42,0.16)] lg:grid-cols-[1.02fr_0.98fr]">
+          <section className="relative hidden overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-9 py-8 text-white lg:flex lg:flex-col lg:justify-between">
             <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-blue-400/20 blur-3xl" />
             <div className="absolute -bottom-24 left-12 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
 
             <div className="relative z-10">
-              <BrandLogo />
+              <AmsLogo />
 
-              <div className="mt-9 max-w-md xl:mt-10">
+              <div className="mt-10 max-w-md">
                 <p className="mb-3 text-xs font-black uppercase tracking-[0.32em] text-blue-200">
                   Welcome Back
                 </p>
 
-                <h2 className="text-[38px] font-black leading-tight tracking-tight xl:text-5xl">
+                <h2 className="text-4xl font-black leading-tight tracking-tight">
                   Secure access to your enterprise audit workspace
                 </h2>
 
-                <p className="mt-4 text-[15px] leading-7 text-slate-200 xl:text-base">
+                <p className="mt-5 text-base leading-7 text-slate-200">
                   Manage audits, teams, meetings, discussions, and operational
                   workflows from one secure platform built for performance.
                 </p>
               </div>
 
-              <div className="mt-7 space-y-3 xl:mt-8">
+              <div className="mt-8 space-y-3">
                 {highlights.map((item) => (
                   <div
                     key={item}
@@ -190,26 +155,62 @@ export default function LoginPage() {
                 ))}
               </div>
             </div>
+
+            <div className="relative z-10 rounded-2xl border border-white/10 bg-white/7 px-5 py-4 text-sm font-medium text-slate-200 backdrop-blur">
+              Authorized AMS users only. Access is protected by authentication
+              and role-based permission control.
+            </div>
           </section>
 
-          <section className="flex h-full items-center justify-center overflow-hidden px-6 py-4 sm:px-10 lg:px-12">
+          <section className="flex h-full items-center justify-center overflow-hidden px-6 py-6 sm:px-10 lg:px-12">
             <div className="w-full max-w-md">
-              <MobileBrandBand />
+              <div className="mb-6 text-center lg:text-left">
+                <div className="mb-6 lg:hidden">
+                  <div className="relative overflow-hidden rounded-[28px] border border-white/70 bg-gradient-to-br from-blue-600 via-blue-600 to-indigo-700 px-5 py-5 text-white shadow-2xl shadow-blue-500/25">
+                    <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/20 blur-2xl" />
+                    <div className="absolute -bottom-12 left-8 h-28 w-28 rounded-full bg-cyan-300/20 blur-2xl" />
 
-              <div className="mb-5 text-center lg:text-left xl:mb-6">
-                <h2 className="text-[42px] font-black tracking-tight text-slate-950 sm:text-5xl lg:text-[44px] xl:text-5xl">
+                    <div className="relative z-10 flex items-center gap-4">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-white/15 text-white shadow-xl ring-1 ring-white/30 backdrop-blur">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-lg">
+                          <ShieldCheck className="h-7 w-7" />
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 text-left">
+                        <div className="flex items-center gap-2">
+                          <h1 className="text-3xl font-black tracking-tight">
+                            AMS
+                          </h1>
+                          <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-50 ring-1 ring-white/20">
+                            Secure
+                          </span>
+                        </div>
+
+                        <p className="mt-1 text-sm font-semibold text-blue-50">
+                          Audit Management System
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-blue-100/85">
+                          Enterprise audit workspace access
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <h2 className="text-4xl font-black tracking-tight text-slate-950">
                   AMS Login
                 </h2>
-                <p className="mt-1.5 text-xl font-medium text-slate-500 xl:text-2xl">
+                <p className="mt-2 text-lg font-medium text-slate-500">
                   Audit Management System
                 </p>
-                <p className="mt-1 text-sm font-medium text-slate-400 sm:text-base">
+                <p className="mt-1 text-sm text-slate-400">
                   Sign in to continue to your dashboard
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-3.5 xl:space-y-4">
-                <div className="space-y-1.5">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
                   <label
                     htmlFor="user_id"
                     className="text-sm font-black uppercase tracking-wide text-slate-600"
@@ -228,12 +229,12 @@ export default function LoginPage() {
                       value={userId}
                       onChange={(event) => setUserId(event.target.value)}
                       placeholder="Enter your User ID"
-                      className="h-13 w-full rounded-2xl border border-slate-300 bg-white pl-12 pr-4 text-base font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:h-14"
+                      className="h-14 w-full rounded-2xl border border-slate-300 bg-white pl-12 pr-4 text-base font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label
                     htmlFor="password"
                     className="text-sm font-black uppercase tracking-wide text-slate-600"
@@ -251,7 +252,7 @@ export default function LoginPage() {
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       placeholder="Enter your password"
-                      className="h-13 w-full rounded-2xl border border-slate-300 bg-white pl-12 pr-14 text-base font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 sm:h-14"
+                      className="h-14 w-full rounded-2xl border border-slate-300 bg-white pl-12 pr-14 text-base font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                     />
 
                     <button
@@ -284,7 +285,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  className="flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 px-4 text-lg font-black text-white shadow-lg shadow-blue-500/20 transition hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 sm:h-14"
+                  className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 px-4 text-lg font-black text-white shadow-lg shadow-blue-500/20 transition hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? (
                     <>
@@ -296,6 +297,11 @@ export default function LoginPage() {
                   )}
                 </button>
               </form>
+
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs font-medium leading-5 text-slate-500">
+                Secure login for authorized AMS users with role-based access
+                control.
+              </div>
             </div>
           </section>
         </div>
@@ -303,3 +309,4 @@ export default function LoginPage() {
     </main>
   );
 }
+
