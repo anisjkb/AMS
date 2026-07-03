@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   CalendarCheck,
@@ -39,7 +39,20 @@ import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
 
 type StatusFilter = "all" | "active" | "inactive";
 type DrawerMode = "create" | "edit";
-type ConfirmAction = "delete" | "restore" | "permanent_delete";
+type ConfirmAction = "inactive" | "restore" | "permanent_delete";
+type SaveMode = "add_another" | "close";
+
+const confirmActionLabel: Record<ConfirmAction, string> = {
+  inactive: "Inactive",
+  restore: "Restore",
+  permanent_delete: "Permanently Delete",
+};
+
+const confirmButtonLabel: Record<ConfirmAction, string> = {
+  inactive: "Inactive",
+  restore: "Restore",
+  permanent_delete: "Permanently Delete",
+};
 
 type PageMessage = {
   type: "success" | "error";
@@ -162,7 +175,11 @@ export default function MeetingMasterPage() {
   const [confirmItem, setConfirmItem] = useState<MeetingMaster | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
-  const debouncedSearch = useDebouncedValue(search, 400);
+  
+  const [sessionCreatedCount, setSessionCreatedCount] = useState(0);
+  const [saveMode, setSaveMode] = useState<SaveMode>("close");
+  const formRef = useRef<HTMLFormElement | null>(null);
+const debouncedSearch = useDebouncedValue(search, 400);
 
   const numericPageSize = useMemo(() => {
     if (pageSize === "all") {
@@ -343,19 +360,38 @@ export default function MeetingMasterPage() {
     setPage(1);
   };
 
-  const openCreateDrawer = () => {
+  
+  const focusMeetingTypeField = () => {
+    window.setTimeout(() => {
+      const meetingTypeInput = formRef.current?.querySelector<HTMLInputElement>(
+        'input[placeholder="Example: Planning"]',
+      );
+
+      meetingTypeInput?.focus();
+      meetingTypeInput?.select();
+    }, 80);
+  };
+const openCreateDrawer = () => {
     setDrawerMode("create");
     setSelectedItem(null);
     setForm(emptyForm);
+    setSessionCreatedCount(0);
+    setSaveMode("close");
+    setMessage(null);
     setDrawerOpen(true);
+    focusMeetingTypeField();
   };
 
   const openEditDrawer = (item: MeetingMaster) => {
     setDrawerMode("edit");
     setSelectedItem(item);
     setForm(buildFormFromItem(item));
+    setSessionCreatedCount(0);
+    setSaveMode("close");
+    setMessage(null);
     setDrawerOpen(true);
     void hydrateSelectedEntityForEdit(item);
+    focusMeetingTypeField();
   };
 
   const closeDrawer = () => {
@@ -364,6 +400,8 @@ export default function MeetingMasterPage() {
     setDrawerOpen(false);
     setSelectedItem(null);
     setForm(emptyForm);
+    setSessionCreatedCount(0);
+    setSaveMode("close");
   };
 
   const openConfirm = (item: MeetingMaster, action: ConfirmAction) => {
@@ -426,24 +464,56 @@ export default function MeetingMasterPage() {
     setMessage(null);
 
     try {
-      const successText =
-        drawerMode === "create"
-          ? "Meeting Master record created successfully."
-          : "Meeting Master record updated successfully.";
-
       if (drawerMode === "create") {
         await createMeetingMaster(buildPayload(form));
-      } else if (selectedItem) {
-        await updateMeetingMaster(selectedItem.meeting_id, buildPayload(form));
+        await loadMeetingMaster();
+
+        if (saveMode === "add_another") {
+          setSessionCreatedCount((current) => current + 1);
+          setForm((current) => ({
+            ...emptyForm,
+            entity_type: current.entity_type,
+            client_id: current.client_id,
+            client_code: current.client_code,
+            audit_year: current.audit_year,
+            audit_start_date: current.audit_start_date,
+            audit_end_date: current.audit_end_date,
+            status: current.status || "active",
+          }));
+
+          setMessage({
+            type: "success",
+            text: "Meeting Master record saved. Add another meeting below.",
+          });
+          focusMeetingTypeField();
+          return;
+        }
+
+        setDrawerOpen(false);
+        setSelectedItem(null);
+        setForm(emptyForm);
+        setSessionCreatedCount(0);
+
+        setMessage({
+          type: "success",
+          text: "Meeting Master record created successfully.",
+        });
+        return;
       }
 
-      setDrawerOpen(false);
-      setSelectedItem(null);
-      setForm(emptyForm);
+      if (selectedItem) {
+        await updateMeetingMaster(selectedItem.meeting_id, buildPayload(form));
+        await loadMeetingMaster();
 
-      await loadMeetingMaster();
+        setDrawerOpen(false);
+        setSelectedItem(null);
+        setForm(emptyForm);
 
-      setMessage({ type: "success", text: successText });
+        setMessage({
+          type: "success",
+          text: "Meeting Master record updated successfully.",
+        });
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Meeting Master request failed.";
@@ -461,11 +531,11 @@ export default function MeetingMasterPage() {
     setMessage(null);
 
     try {
-      if (confirmAction === "delete") {
+      if (confirmAction === "inactive") {
         await deactivateMeetingMaster(confirmItem.meeting_id);
         setMessage({
           type: "success",
-          text: "Meeting Master record deactivated successfully.",
+          text: "Meeting Master record marked inactive successfully.",
         });
       }
 
@@ -708,7 +778,7 @@ export default function MeetingMasterPage() {
 
                             {item.is_active && meetingMasterActions.canDelete ? (
                               <button
-                                onClick={() => openConfirm(item, "delete")}
+                                onClick={() => openConfirm(item, "inactive")}
                                 className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
                                 title="Inactive"
                               >
@@ -761,7 +831,13 @@ export default function MeetingMasterPage() {
         isOpen={drawerOpen}
         onClose={closeDrawer}
         title="Meeting Master"
-        description={drawerMode === "create" ? "Create" : "Edit"}
+        description={
+          drawerMode === "create"
+            ? sessionCreatedCount > 0
+              ? `Create — ${sessionCreatedCount} meeting${sessionCreatedCount === 1 ? "" : "s"} added in this session`
+              : "Create"
+            : "Edit"
+        }
         maxWidthClassName="max-w-3xl"
         footer={
           <>
@@ -773,23 +849,59 @@ export default function MeetingMasterPage() {
               Cancel
             </button>
 
-            <button
-              type="submit"
-              form="meeting-master-form"
-              disabled={submitLoading}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CalendarCheck className="h-4 w-4" />
-              )}
-              {drawerMode === "create" ? "Create" : "Update"}
-            </button>
+            {drawerMode === "create" ? (
+              <>
+                <button
+                  type="submit"
+                  form="meeting-master-form"
+                  disabled={submitLoading}
+                  onClick={() => setSaveMode("close")}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitLoading && saveMode === "close" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CalendarCheck className="h-4 w-4" />
+                  )}
+                  Save & Close
+                </button>
+
+                <button
+                  type="submit"
+                  form="meeting-master-form"
+                  disabled={submitLoading}
+                  onClick={() => setSaveMode("add_another")}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitLoading && saveMode === "add_another" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Save & Add Another
+                </button>
+              </>
+            ) : (
+              <button
+                type="submit"
+                form="meeting-master-form"
+                disabled={submitLoading}
+                onClick={() => setSaveMode("close")}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submitLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CalendarCheck className="h-4 w-4" />
+                )}
+                Update
+              </button>
+            )}
           </>
         }
       >
         <form
+          ref={formRef}
           id="meeting-master-form"
           onSubmit={handleSubmit}
           className="space-y-5"
@@ -948,12 +1060,12 @@ export default function MeetingMasterPage() {
               </div>
               <div>
                 <h3 className="text-lg font-black text-slate-900">
-                  Confirm Action
+                  {confirmActionLabel[confirmAction]} Meeting Master
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
                   Are you sure you want to{" "}
                   <span className="font-black text-slate-700">
-                    {toTitle(confirmAction)}
+                    {confirmActionLabel[confirmAction]}
                   </span>{" "}
                   this Meeting Master record?
                 </p>
@@ -978,7 +1090,7 @@ export default function MeetingMasterPage() {
                 {submitLoading ? (
                   <Loader2 size={18} className="animate-spin" />
                 ) : null}
-                Confirm
+                {confirmButtonLabel[confirmAction]}
               </button>
             </div>
           </div>
@@ -987,3 +1099,6 @@ export default function MeetingMasterPage() {
     </div>
   );
 }
+
+
+
