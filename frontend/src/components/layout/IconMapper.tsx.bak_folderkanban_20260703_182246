@@ -27,7 +27,6 @@ import {
   FileSpreadsheet,
   FileText,
   FolderTree,
-  FolderKanban,
   GitBranch,
   Home,
   Landmark,
@@ -76,7 +75,6 @@ export const iconMap = {
   FileSpreadsheet,
   FileText,
   FolderTree,
-  FolderKanban,
   GitBranch,
   Home,
   Landmark,
@@ -163,6 +161,5 @@ export function IconMapper({
 }
 
 export default IconMapper;
-
 
 

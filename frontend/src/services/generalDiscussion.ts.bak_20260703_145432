@@ -1,0 +1,68 @@
+export type GeneralDiscussion = {
+  id: number;
+  audit_id: number;
+  title: string;
+  description: string | null;
+  status: string;
+  is_active: boolean;
+};
+
+type ListParams = {
+  page: number;
+  pageSize: number;
+  search?: string;
+  isActive?: boolean;
+};
+
+export type PaginatedGeneralDiscussionResponse = {
+  data?: GeneralDiscussion[];
+  items?: GeneralDiscussion[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  pageSize?: number;
+  [key: string]: unknown;
+};
+
+function buildQuery(p: ListParams) {
+  const q = new URLSearchParams();
+
+  q.set("page", String(p.page));
+  q.set("page_size", String(p.pageSize));
+
+  if (p.search) q.set("search", p.search);
+  if (typeof p.isActive === "boolean") {
+    q.set("is_active", String(p.isActive));
+  }
+
+  return q.toString();
+}
+
+async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(options?.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Request failed with status ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export function listGeneralDiscussions(
+  params: ListParams
+): Promise<PaginatedGeneralDiscussionResponse> {
+  const query = buildQuery(params);
+
+  return requestJson<PaginatedGeneralDiscussionResponse>(
+    `/api/backend/general-discussions?${query}`,
+    { method: "GET" }
+  );
+}

@@ -34,6 +34,7 @@ from app.models.department import Department
 from app.models.designation import Designation
 from app.models.employee import Employee
 from app.models.general_discussion import GeneralDiscussion
+from app.models.general_discussion_issue import GeneralDiscussionIssue
 from app.models.legal_status import LegalStatus
 from app.models.meeting_master import MeetingMaster
 from app.models.meeting_participant import MeetingParticipant
@@ -51,6 +52,8 @@ from app.models.user_role import UserRole
 
 __all__ = [
     "AuditDiscussionIssue",
+    "GeneralDiscussion",
+    "GeneralDiscussionIssue",
     "AuditEntity",
     "AuditEntityAddressType",
     "AuditEntityAddress",

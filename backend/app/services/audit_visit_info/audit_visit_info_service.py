@@ -98,6 +98,7 @@ class AuditVisitInfoService:
     ):
         audit_master = await self._get_valid_audit_master(payload.audit_id)
         await self._validate_team(payload.team_id)
+        await self._validate_client_address(payload.client_address_id, audit_master)
         self._validate_visit_date(
             audit_master=audit_master,
             visit_date=payload.visit_date,
@@ -205,3 +206,14 @@ class AuditVisitInfoService:
             "message": "Audit Visit Info record permanently deleted successfully.",
             "data": None,
         }
+
+async def _validate_client_address(self, client_address_id: int, audit_master):
+    client_address = await self.repository.get_active_client_address_by_id(client_address_id)
+
+    if not client_address:
+        raise Exception("Invalid Client Address")
+
+    if int(client_address.audit_entity_id) != int(audit_master.client_id):
+        raise Exception("Client Address does not belong to selected Audit Master")
+
+    return client_address

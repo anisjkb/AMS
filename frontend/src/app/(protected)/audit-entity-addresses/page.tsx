@@ -1,3 +1,4 @@
+//frontend/src/app/(protected)/audit-entity-addresses/page.tsx
 "use client";
 
 import {

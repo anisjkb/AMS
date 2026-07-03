@@ -200,3 +200,16 @@ class AuditVisitInfoRepository:
     async def permanent_delete(self, item: AuditVisitInfo) -> None:
         await self.db.delete(item)
         await self.db.commit()
+
+
+from app.models.audit_entity_address import AuditEntityAddress
+from sqlalchemy import select
+
+async def get_active_client_address_by_id(self, client_address_id: int):
+    result = await self.db.execute(
+        select(AuditEntityAddress).where(
+            AuditEntityAddress.id == client_address_id,
+            AuditEntityAddress.is_active.is_(True),
+        )
+    )
+    return result.scalar_one_or_none()

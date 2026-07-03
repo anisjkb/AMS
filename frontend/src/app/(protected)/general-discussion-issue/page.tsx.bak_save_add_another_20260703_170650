@@ -1,11 +1,10 @@
-//frontend/src/app/(protected)/audit-core/visit-info/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
-  CalendarDays,
   Loader2,
+  MessageSquareText,
   Pencil,
   Plus,
   RotateCcw,
@@ -22,65 +21,61 @@ import {
   DEFAULT_CRUD_PAGE_SIZE,
   type CrudPageSizeOption,
 } from "@/components/crud/crudConstants";
-import CrudDateField from "@/components/crud/fields/CrudDateField";
 import CrudSelectField from "@/components/crud/fields/CrudSelectField";
+import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
+import CrudTextField from "@/components/crud/fields/CrudTextField";
 import { listAuditMaster, type AuditMaster } from "@/services/auditMaster";
-import { listAuditTeams, type AuditTeam } from "@/services/auditTeam";
-import { listAuditEntityAddresses, type AuditEntityAddress } from "@/services/auditEntityAddress";
 import {
-  createAuditVisitInfo,
-  deactivateAuditVisitInfo,
-  listAuditVisitInfo,
-  permanentDeleteAuditVisitInfo,
-  restoreAuditVisitInfo,
-  updateAuditVisitInfo,
-  type AuditVisitInfo,
-  type AuditVisitInfoPayload,
-} from "@/services/auditVisitInfo";
+  createGeneralDiscussion,
+  deactivateGeneralDiscussion,
+  listGeneralDiscussions,
+  permanentDeleteGeneralDiscussion,
+  restoreGeneralDiscussion,
+  updateGeneralDiscussion,
+  type GeneralDiscussion,
+  type GeneralDiscussionPayload,
+} from "@/services/generalDiscussion";
 
 type StatusFilter = "all" | "active" | "inactive";
 type DrawerMode = "create" | "edit";
-type ConfirmAction = "delete" | "restore" | "permanent_delete";
+type ConfirmAction = "inactive" | "restore" | "permanent_delete";
+
+const confirmActionLabel: Record<ConfirmAction, string> = {
+  inactive: "Inactive",
+  restore: "Restore",
+  permanent_delete: "Permanently Delete",
+};
+
+const confirmButtonLabel: Record<ConfirmAction, string> = {
+  inactive: "Inactive",
+  restore: "Restore",
+  permanent_delete: "Permanently Delete",
+};
 
 type PageMessage = {
   type: "success" | "error";
   text: string;
 };
 
-const formatClientAddressOptionLabel = (address: AuditEntityAddress): string => {
-  const parts = [
-    address.address_line1,
-    address.city,
-    address.country,
-  ].filter(Boolean);
-
-  const label = parts.length > 0 ? parts.join(", ") : "Client Address";
-
-  return `${label} (#${address.id})`;
-};
-
 type FormState = {
   audit_id: string;
-  team_id: string;
-  client_address_id: string;
-  visit_date: string;
+  title: string;
+  description: string;
   status: string;
 };
 
 const emptyForm: FormState = {
   audit_id: "",
-  team_id: "",
-  client_address_id: "",
-  visit_date: "",
+  title: "",
+  description: "",
   status: "active",
 };
 
 const statusOptions = [
   { value: "active", label: "Active" },
   { value: "draft", label: "Draft" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "review", label: "Review" },
+  { value: "closed", label: "Closed" },
   { value: "inactive", label: "Inactive" },
 ];
 
@@ -105,36 +100,68 @@ function toTitle(value: string | null | undefined) {
     .join(" ");
 }
 
-function buildAuditMasterLabel(audit: AuditMaster) {
-  const name = audit.audit_name || audit.audit_type;
+function truncateText(value: string | null | undefined, maxLength = 95) {
+  if (!value) return "-";
+  if (value.length <= maxLength) return value;
 
-  return `${name} - ${audit.audit_year} (#${audit.audit_id})`;
+  return `${value.slice(0, maxLength).trim()}...`;
 }
 
-function buildFormFromItem(item: AuditVisitInfo): FormState {
+function readTextField(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+
+  return "";
+}
+
+function buildAuditLabel(audit: AuditMaster) {
+  const record = audit as unknown as Record<string, unknown>;
+  const auditId = readTextField(record, ["audit_id", "id"]);
+  const auditCode = readTextField(record, ["audit_code", "code"]);
+  const auditTitle = readTextField(record, [
+    "audit_title",
+    "title",
+    "audit_name",
+    "name",
+    "audit_type",
+  ]);
+
+  return [auditId ? `Audit #${auditId}` : "", auditCode, auditTitle]
+    .filter(Boolean)
+    .join(" - ");
+}
+
+function buildFormFromItem(item: GeneralDiscussion): FormState {
   return {
     audit_id: String(item.audit_id),
-    team_id: String(item.team_id),
-    client_address_id: String(item.client_address_id),
-    visit_date: item.visit_date,
+    title: item.title,
+    description: item.description ?? "",
     status: item.status,
   };
 }
 
-function buildPayload(form: FormState): AuditVisitInfoPayload {
+function buildPayload(form: FormState): GeneralDiscussionPayload {
   return {
     audit_id: Number.parseInt(form.audit_id, 10),
-    team_id: Number.parseInt(form.team_id, 10),
-    client_address_id: Number.parseInt(form.client_address_id, 10),
-    visit_date: form.visit_date,
+    title: form.title.trim(),
+    description: form.description.trim() || null,
     status: form.status.trim(),
   };
 }
 
-export default function AuditVisitInfoPage() {
-  const auditVisitInfoActions = useModuleActions("audit_visit_info");
+export default function GeneralDiscussionIssuePage() {
+  const generalDiscussionActions = useModuleActions("general_discussion");
 
-  const [items, setItems] = useState<AuditVisitInfo[]>([]);
+  const [items, setItems] = useState<GeneralDiscussion[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] =
     useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
@@ -144,8 +171,6 @@ export default function AuditVisitInfoPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const [auditOptions, setAuditOptions] = useState<AuditMaster[]>([]);
-  const [teamOptions, setTeamOptions] = useState<AuditTeam[]>([]);
-  const [clientAddresses, setClientAddresses] = useState<AuditEntityAddress[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -154,10 +179,10 @@ export default function AuditVisitInfoPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
-  const [selectedItem, setSelectedItem] = useState<AuditVisitInfo | null>(null);
+  const [selectedItem, setSelectedItem] = useState<GeneralDiscussion | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
-  const [confirmItem, setConfirmItem] = useState<AuditVisitInfo | null>(null);
+  const [confirmItem, setConfirmItem] = useState<GeneralDiscussion | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   const debouncedSearch = useDebouncedValue(search, 400);
@@ -183,52 +208,24 @@ export default function AuditVisitInfoPage() {
   }, [statusFilter]);
 
   const auditMap = useMemo(() => {
-    return new Map(auditOptions.map((audit) => [audit.audit_id, audit]));
+    return new Map(
+      auditOptions.map((audit) => [
+        String((audit as unknown as Record<string, unknown>).audit_id),
+        audit,
+      ]),
+    );
   }, [auditOptions]);
 
-  const teamMap = useMemo(() => {
-    return new Map(teamOptions.map((team) => [team.team_id, team]));
-  }, [teamOptions]);
+  const showTopActions = generalDiscussionActions.showTopActions;
+  const showRowActions = generalDiscussionActions.showRowActions;
+  const tableColumnCount = showRowActions ? 8 : 7;
 
-  const selectedAudit = useMemo(() => {
-    if (!form.audit_id) return null;
-
-    return auditMap.get(Number.parseInt(form.audit_id, 10)) ?? null;
-  }, [auditMap, form.audit_id]);
-
-  const selectedTeam = useMemo(() => {
-    if (!form.team_id) return null;
-
-    return teamMap.get(Number.parseInt(form.team_id, 10)) ?? null;
-  }, [form.team_id, teamMap]);
-
-  const clientAddressSelectOptions = useMemo(() => {
-    if (!selectedAudit) {
-      return [];
-    }
-
-    return clientAddresses
-      .filter(
-        (address) =>
-          address.is_active === true &&
-          Number(address.audit_entity_id) === Number(selectedAudit.client_id),
-      )
-      .map((address) => ({
-        label: formatClientAddressOptionLabel(address),
-        value: String(address.id),
-      }));
-  }, [clientAddresses, selectedAudit]);
-
-  const showTopActions = auditVisitInfoActions.showTopActions;
-  const showRowActions = auditVisitInfoActions.showRowActions;
-  const tableColumnCount = showRowActions ? 9 : 8;
-
-  const loadAuditVisitInfo = useCallback(async () => {
+  const loadGeneralDiscussions = useCallback(async () => {
     setIsLoading(true);
     setMessage(null);
 
     try {
-      const response = await listAuditVisitInfo({
+      const response = await listGeneralDiscussions({
         page,
         pageSize: numericPageSize,
         search: debouncedSearch,
@@ -241,7 +238,7 @@ export default function AuditVisitInfoPage() {
       const errorMessage =
         error instanceof Error
           ? error.message
-          : "Failed to load Audit Visit Info.";
+          : "Failed to load General Discussion Issue records.";
 
       setMessage({ type: "error", text: errorMessage });
       setItems([]);
@@ -251,78 +248,68 @@ export default function AuditVisitInfoPage() {
     }
   }, [debouncedSearch, isActiveFilter, numericPageSize, page]);
 
-  const loadCatalogs = useCallback(async () => {
+  const loadAuditOptions = useCallback(async () => {
     setCatalogLoading(true);
 
     try {
-      const [auditResponse, teamResponse, addressResponse] = await Promise.all([
-        listAuditMaster({
-          page: 1,
-          pageSize: 100,
-          isActive: true,
-        }),
-        listAuditTeams({
-          page: 1,
-          pageSize: 100,
-          isActive: true,
-        }),
-        listAuditEntityAddresses({
-          page: 1,
-          pageSize: 100,
-          isActive: true,
-        }),
-      ]);
+      const response = await listAuditMaster({
+        page: 1,
+        pageSize: 100,
+        isActive: true,
+      });
 
-      setAuditOptions(auditResponse.items);
-      setTeamOptions(teamResponse.items);
-      setClientAddresses(addressResponse.items);
+      setAuditOptions(response.items);
     } catch {
       setAuditOptions([]);
-      setTeamOptions([]);
-      setClientAddresses([]);
     } finally {
       setCatalogLoading(false);
     }
   }, []);
 
-    useEffect(() => {
+  useEffect(() => {
     const timerId = window.setTimeout(() => {
-      void loadAuditVisitInfo();
+      void loadGeneralDiscussions();
     }, 0);
 
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [loadAuditVisitInfo]);
+  }, [loadGeneralDiscussions]);
 
-    useEffect(() => {
+  useEffect(() => {
     const timerId = window.setTimeout(() => {
-      void loadCatalogs();
+      void loadAuditOptions();
     }, 0);
 
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [loadCatalogs]);
+  }, [loadAuditOptions]);
 
   const resetToFirstPage = () => {
     setPage(1);
   };
 
   const openCreateDrawer = () => {
+    const firstAudit =
+      auditOptions[0] as unknown as Record<string, unknown> | undefined;
+
     setDrawerMode("create");
     setSelectedItem(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      audit_id: firstAudit?.audit_id ? String(firstAudit.audit_id) : "",
+    });
     setDrawerOpen(true);
-    void loadCatalogs();
+    void loadAuditOptions();
   };
 
-  const openEditDrawer = (item: AuditVisitInfo) => {
+  const openEditDrawer = (item: GeneralDiscussion) => {
     setDrawerMode("edit");
     setSelectedItem(item);
     setForm(buildFormFromItem(item));
     setDrawerOpen(true);
-    void loadCatalogs();
+    void loadAuditOptions();
   };
 
   const closeDrawer = () => {
@@ -333,7 +320,7 @@ export default function AuditVisitInfoPage() {
     setForm(emptyForm);
   };
 
-  const openConfirm = (item: AuditVisitInfo, action: ConfirmAction) => {
+  const openConfirm = (item: GeneralDiscussion, action: ConfirmAction) => {
     setConfirmItem(item);
     setConfirmAction(action);
   };
@@ -347,46 +334,16 @@ export default function AuditVisitInfoPage() {
 
   const validateForm = () => {
     if (!form.audit_id.trim()) {
-      setMessage({ type: "error", text: "Audit Master is required." });
+      setMessage({
+        type: "error",
+        text: "Please select a system-generated Audit Master record.",
+      });
       return false;
     }
 
-    if (!form.team_id.trim()) {
-      setMessage({ type: "error", text: "Audit Team is required." });
+    if (!form.title.trim()) {
+      setMessage({ type: "error", text: "Title is required." });
       return false;
-    }
-
-    if (!form.client_address_id.trim()) {
-      setMessage({ type: "error", text: "Client Address is required." });
-      return false;
-    }
-
-    if (Number.isNaN(Number.parseInt(form.client_address_id, 10))) {
-      setMessage({ type: "error", text: "Client Address must be selected." });
-      return false;
-    }
-
-    if (!form.visit_date.trim()) {
-      setMessage({ type: "error", text: "Visit Date is required." });
-      return false;
-    }
-
-    if (selectedAudit) {
-      if (form.visit_date < selectedAudit.audit_start_date) {
-        setMessage({
-          type: "error",
-          text: "Visit Date cannot be before Audit Start Date.",
-        });
-        return false;
-      }
-
-      if (form.visit_date > selectedAudit.audit_end_date) {
-        setMessage({
-          type: "error",
-          text: "Visit Date cannot be after Audit End Date.",
-        });
-        return false;
-      }
     }
 
     if (!form.status.trim()) {
@@ -406,29 +363,30 @@ export default function AuditVisitInfoPage() {
     setMessage(null);
 
     try {
-      const successText =
-        drawerMode === "create"
-          ? "Audit Visit Info record created successfully."
-          : "Audit Visit Info record updated successfully.";
-
       if (drawerMode === "create") {
-        await createAuditVisitInfo(buildPayload(form));
+        await createGeneralDiscussion(buildPayload(form));
       } else if (selectedItem) {
-        await updateAuditVisitInfo(selectedItem.visit_id, buildPayload(form));
+        await updateGeneralDiscussion(selectedItem.id, buildPayload(form));
       }
 
       setDrawerOpen(false);
       setSelectedItem(null);
       setForm(emptyForm);
 
-      await loadAuditVisitInfo();
+      await loadGeneralDiscussions();
 
-      setMessage({ type: "success", text: successText });
+      setMessage({
+        type: "success",
+        text:
+          drawerMode === "create"
+            ? "General Discussion Issue record created successfully."
+            : "General Discussion Issue record updated successfully.",
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error
           ? error.message
-          : "Audit Visit Info request failed.";
+          : "General Discussion Issue request failed.";
 
       setMessage({ type: "error", text: errorMessage });
     } finally {
@@ -443,33 +401,33 @@ export default function AuditVisitInfoPage() {
     setMessage(null);
 
     try {
-      if (confirmAction === "delete") {
-        await deactivateAuditVisitInfo(confirmItem.visit_id);
+      if (confirmAction === "inactive") {
+        await deactivateGeneralDiscussion(confirmItem.id);
         setMessage({
           type: "success",
-          text: "Audit Visit Info record deactivated successfully.",
+          text: "General Discussion Issue record deactivated successfully.",
         });
       }
 
       if (confirmAction === "restore") {
-        await restoreAuditVisitInfo(confirmItem.visit_id);
+        await restoreGeneralDiscussion(confirmItem.id);
         setMessage({
           type: "success",
-          text: "Audit Visit Info record restored successfully.",
+          text: "General Discussion Issue record restored successfully.",
         });
       }
 
       if (confirmAction === "permanent_delete") {
-        await permanentDeleteAuditVisitInfo(confirmItem.visit_id);
+        await permanentDeleteGeneralDiscussion(confirmItem.id);
         setMessage({
           type: "success",
-          text: "Audit Visit Info record permanently deleted successfully.",
+          text: "General Discussion Issue record permanently deleted successfully.",
         });
       }
 
       setConfirmItem(null);
       setConfirmAction(null);
-      await loadAuditVisitInfo();
+      await loadGeneralDiscussions();
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Action failed.";
@@ -489,36 +447,22 @@ export default function AuditVisitInfoPage() {
               <p className="text-sm font-bold uppercase tracking-widest text-blue-200">
                 Audit Core
               </p>
-              <h1 className="mt-2 text-3xl font-black">Audit Visit Info</h1>
+              <h1 className="mt-2 text-3xl font-black">
+                General Discussion Issue
+              </h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-slate-300">
-                Schedule audit visits by Audit Master, Audit Team and client address.
+                Manage general audit discussion issue records with system-generated audit references.
               </p>
             </div>
 
-            {showTopActions ? (
-              <div className="flex flex-wrap gap-2">
-                {auditVisitInfoActions.canCreate ? (
-                  <button
-                    onClick={openCreateDrawer}
-                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-blue-50"
-                  >
-                    <Plus size={18} />
-                    Create
-                  </button>
-                ) : null}
-
-                {auditVisitInfoActions.canExport ? (
-                  <button className="rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">
-                    Export
-                  </button>
-                ) : null}
-
-                {auditVisitInfoActions.canImport ? (
-                  <button className="rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">
-                    Import
-                  </button>
-                ) : null}
-              </div>
+            {showTopActions && generalDiscussionActions.canCreate ? (
+              <button
+                onClick={openCreateDrawer}
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-blue-50"
+              >
+                <Plus size={18} />
+                Create
+              </button>
             ) : null}
           </div>
         </div>
@@ -529,7 +473,7 @@ export default function AuditVisitInfoPage() {
             setPageSize(value as CrudPageSizeOption);
             resetToFirstPage();
           }}
-          onRefresh={loadAuditVisitInfo}
+          onRefresh={loadGeneralDiscussions}
           onReset={() => {
             setSearch("");
             setStatusFilter("all");
@@ -542,7 +486,7 @@ export default function AuditVisitInfoPage() {
               label: "Search",
               type: "search",
               value: search,
-              placeholder: "Search visit id, audit id, team id, date...",
+              placeholder: "Search title or description...",
               onChange: (value) => {
                 setSearch(value);
                 resetToFirstPage();
@@ -582,14 +526,13 @@ export default function AuditVisitInfoPage() {
           <table className="min-w-full divide-y divide-slate-100">
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-black uppercase tracking-wider text-slate-500">
-                <th className="px-5 py-4">Visit ID</th>
-                <th className="px-5 py-4">Audit Master</th>
-                <th className="px-5 py-4">Audit Team</th>
-                <th className="px-5 py-4">Client Address</th>
-                <th className="px-5 py-4">Visit Date</th>
+                <th className="px-5 py-4">ID</th>
+                <th className="px-5 py-4">System Audit</th>
+                <th className="px-5 py-4">Title</th>
+                <th className="px-5 py-4">Description</th>
                 <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Created</th>
                 <th className="px-5 py-4">Active</th>
+                <th className="px-5 py-4">Created</th>
                 {showRowActions ? (
                   <th className="px-5 py-4 text-right">Action</th>
                 ) : null}
@@ -602,7 +545,7 @@ export default function AuditVisitInfoPage() {
                   <td colSpan={tableColumnCount} className="px-5 py-12">
                     <div className="flex items-center justify-center gap-3 text-slate-500">
                       <Loader2 className="animate-spin" size={22} />
-                      Loading Audit Visit Info...
+                      Loading General Discussion Issue records...
                     </div>
                   </td>
                 </tr>
@@ -612,12 +555,15 @@ export default function AuditVisitInfoPage() {
                 <tr>
                   <td colSpan={tableColumnCount} className="px-5 py-12">
                     <div className="text-center">
-                      <CalendarDays size={42} className="mx-auto text-slate-300" />
+                      <MessageSquareText
+                        size={42}
+                        className="mx-auto text-slate-300"
+                      />
                       <p className="mt-3 text-sm font-black text-slate-600">
-                        No Audit Visit Info found
+                        No General Discussion Issue records found
                       </p>
                       <p className="mt-1 text-sm text-slate-400">
-                        Create the first audit visit schedule.
+                        Create the first general discussion issue record.
                       </p>
                     </div>
                   </td>
@@ -626,40 +572,36 @@ export default function AuditVisitInfoPage() {
 
               {!isLoading
                 ? items.map((item) => {
-                    const audit = auditMap.get(item.audit_id);
-                    const team = teamMap.get(item.team_id);
+                    const audit = auditMap.get(String(item.audit_id));
 
                     return (
-                      <tr key={item.visit_id} className="hover:bg-slate-50">
+                      <tr key={item.id} className="hover:bg-slate-50">
                         <td className="px-5 py-4 text-sm font-black text-slate-900">
-                          #{item.visit_id}
+                          #{item.id}
                         </td>
                         <td className="px-5 py-4 text-sm font-bold text-slate-600">
-                          {audit ? buildAuditMasterLabel(audit) : `Audit #${item.audit_id}`}
+                          {audit ? buildAuditLabel(audit) : `Audit #${item.audit_id}`}
                         </td>
-                        <td className="px-5 py-4 text-sm font-bold text-slate-600">
-                          {team?.team_name ?? `Team #${item.team_id}`}
+                        <td className="px-5 py-4 text-sm font-bold text-slate-800">
+                          {item.title}
                         </td>
-                        <td className="px-5 py-4 text-sm text-slate-500">
-                          Address #{item.client_address_id}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-bold text-slate-700">
-                          {formatDate(item.visit_date)}
+                        <td className="max-w-md px-5 py-4 text-sm text-slate-500">
+                          {truncateText(item.description)}
                         </td>
                         <td className="px-5 py-4">
                           <CrudPillBadge>{toTitle(item.status)}</CrudPillBadge>
                         </td>
-                        <td className="px-5 py-4 text-sm text-slate-500">
-                          {formatDate(item.created_at)}
-                        </td>
                         <td className="px-5 py-4">
                           <CrudStatusBadge active={item.is_active} />
+                        </td>
+                        <td className="px-5 py-4 text-sm text-slate-500">
+                          {formatDate(item.created_at)}
                         </td>
 
                         {showRowActions ? (
                           <td className="px-5 py-4">
                             <div className="flex justify-end gap-2">
-                              {auditVisitInfoActions.canUpdate ? (
+                              {generalDiscussionActions.canUpdate ? (
                                 <button
                                   onClick={() => openEditDrawer(item)}
                                   className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-amber-50 hover:text-amber-600"
@@ -669,9 +611,9 @@ export default function AuditVisitInfoPage() {
                                 </button>
                               ) : null}
 
-                              {item.is_active && auditVisitInfoActions.canDelete ? (
+                              {item.is_active && generalDiscussionActions.canDelete ? (
                                 <button
-                                  onClick={() => openConfirm(item, "delete")}
+                                  onClick={() => openConfirm(item, "inactive")}
                                   className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
                                   title="Inactive"
                                 >
@@ -679,7 +621,7 @@ export default function AuditVisitInfoPage() {
                                 </button>
                               ) : null}
 
-                              {!item.is_active && auditVisitInfoActions.canRestore ? (
+                              {!item.is_active && generalDiscussionActions.canRestore ? (
                                 <button
                                   onClick={() => openConfirm(item, "restore")}
                                   className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-green-50 hover:text-green-600"
@@ -690,7 +632,7 @@ export default function AuditVisitInfoPage() {
                               ) : null}
 
                               {!item.is_active &&
-                              auditVisitInfoActions.canPermanentDelete ? (
+                              generalDiscussionActions.canPermanentDelete ? (
                                 <button
                                   onClick={() =>
                                     openConfirm(item, "permanent_delete")
@@ -724,7 +666,7 @@ export default function AuditVisitInfoPage() {
       <CrudDrawer
         isOpen={drawerOpen}
         onClose={closeDrawer}
-        title="Audit Visit Info"
+        title="General Discussion Issue"
         description={drawerMode === "create" ? "Create" : "Edit"}
         maxWidthClassName="max-w-3xl"
         footer={
@@ -739,14 +681,14 @@ export default function AuditVisitInfoPage() {
 
             <button
               type="submit"
-              form="audit-visit-info-form"
+              form="general-discussion-issue-form"
               disabled={submitLoading}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <CalendarDays className="h-4 w-4" />
+                <MessageSquareText className="h-4 w-4" />
               )}
               {drawerMode === "create" ? "Create" : "Update"}
             </button>
@@ -754,110 +696,61 @@ export default function AuditVisitInfoPage() {
         }
       >
         <form
-          id="audit-visit-info-form"
+          id="general-discussion-issue-form"
           onSubmit={handleSubmit}
           className="space-y-5"
         >
           <CrudSelectField
-            label="Audit Master"
+            label="System Audit"
             value={form.audit_id}
             options={[
               {
                 value: "",
                 label: catalogLoading
-                  ? "Loading Audit Master..."
-                  : "Select Audit Master",
+                  ? "Loading system audit records..."
+                  : "Select system-generated audit record",
               },
-              ...auditOptions.map((audit) => ({
-                value: String(audit.audit_id),
-                label: buildAuditMasterLabel(audit),
-              })),
+              ...auditOptions.map((audit) => {
+                const record = audit as unknown as Record<string, unknown>;
+
+                return {
+                  value: String(record.audit_id),
+                  label: buildAuditLabel(audit),
+                };
+              }),
             ]}
             onChange={(value) =>
-              setForm((current) => ({
-                ...current,
-                audit_id: value,
-                      client_address_id: "",
-                visit_date: "",
-              }))
+              setForm((current) => ({ ...current, audit_id: value }))
             }
           />
 
-          {selectedAudit ? (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
-              Audit Period: {formatDate(selectedAudit.audit_start_date)} to{" "}
-              {formatDate(selectedAudit.audit_end_date)}
-            </div>
-          ) : null}
+          <CrudTextField
+            label="Title"
+            value={form.title}
+            required
+            placeholder="Write discussion issue title"
+            onChange={(value) =>
+              setForm((current) => ({ ...current, title: value }))
+            }
+          />
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <CrudSelectField
-              label="Audit Team"
-              value={form.team_id}
-              options={[
-                {
-                  value: "",
-                  label: catalogLoading ? "Loading teams..." : "Select Audit Team",
-                },
-                ...teamOptions.map((team) => ({
-                  value: String(team.team_id),
-                  label: team.team_name,
-                })),
-              ]}
-              onChange={(value) =>
-                setForm((current) => ({ ...current, team_id: value }))
-              }
-            />
+          <CrudTextAreaField
+            label="Description"
+            value={form.description}
+            placeholder="Write discussion issue description..."
+            onChange={(value) =>
+              setForm((current) => ({ ...current, description: value }))
+            }
+          />
 
-            <CrudSelectField
-              label="Client Address"
-              value={form.client_address_id}
-              required
-              options={[
-                {
-                  label: form.audit_id
-                    ? catalogLoading
-                      ? "Loading Client Addresses..."
-                      : "Select Client Address"
-                    : "Select Audit Master first",
-                  value: "",
-                },
-                ...clientAddressSelectOptions,
-              ]}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  client_address_id: value,
-                }))
-              }
-            />
-          </div>
-
-          {selectedTeam ? (
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-              Selected Team: {selectedTeam.team_name}
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <CrudDateField
-              label="Visit Date"
-              value={form.visit_date}
-              required
-              onChange={(value) =>
-                setForm((current) => ({ ...current, visit_date: value }))
-              }
-            />
-
-            <CrudSelectField
-              label="Status"
-              value={form.status}
-              options={statusOptions}
-              onChange={(value) =>
-                setForm((current) => ({ ...current, status: value }))
-              }
-            />
-          </div>
+          <CrudSelectField
+            label="Status"
+            value={form.status}
+            options={statusOptions}
+            onChange={(value) =>
+              setForm((current) => ({ ...current, status: value }))
+            }
+          />
 
           {message && drawerOpen && message.type === "error" ? (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
@@ -881,12 +774,12 @@ export default function AuditVisitInfoPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   Are you sure you want to{" "}
                   <span className="font-black text-slate-700">
-                    {toTitle(confirmAction)}
+                    {confirmActionLabel[confirmAction]}
                   </span>{" "}
-                  this Audit Visit Info?
+                  this General Discussion Issue?
                 </p>
                 <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold text-slate-700">
-                  Visit #{confirmItem.visit_id} — {formatDate(confirmItem.visit_date)}
+                  #{confirmItem.id} — {confirmItem.title}
                 </p>
               </div>
             </div>
@@ -915,6 +808,4 @@ export default function AuditVisitInfoPage() {
     </div>
   );
 }
-
-
 

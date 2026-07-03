@@ -1,0 +1,30 @@
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
+
+
+class GeneralDiscussionBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    audit_id: int
+    created_by: Optional[int] = None
+    status: str = "active"
+
+
+class GeneralDiscussionCreate(GeneralDiscussionBase):
+    pass
+
+
+class GeneralDiscussionUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+
+
+class GeneralDiscussionResponse(GeneralDiscussionBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

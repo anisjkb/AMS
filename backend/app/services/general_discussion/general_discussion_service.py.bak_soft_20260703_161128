@@ -1,0 +1,33 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.general_discussion import GeneralDiscussion
+from app.repositories.general_discussion_repository import GeneralDiscussionRepository
+
+
+def _to_dict(data):
+    if hasattr(data, "model_dump"):
+        return data.model_dump(exclude_unset=True)
+    return data.dict(exclude_unset=True)
+
+
+class GeneralDiscussionService:
+    def __init__(self):
+        self.repo = GeneralDiscussionRepository()
+
+    async def create(self, db: AsyncSession, data):
+        obj = GeneralDiscussion(**_to_dict(data))
+        return await self.repo.create(db, obj)
+
+    async def get(self, db: AsyncSession, id: int):
+        return await self.repo.get_by_id(db, id)
+
+    async def list(self, db: AsyncSession, page: int = 1, page_size: int = 10):
+        return await self.repo.list(db, page=page, page_size=page_size)
+
+    async def update(self, db: AsyncSession, obj, data):
+        for key, value in _to_dict(data).items():
+            setattr(obj, key, value)
+        return await self.repo.update(db, obj)
+
+    async def delete(self, db: AsyncSession, obj):
+        return await self.repo.delete(db, obj)
