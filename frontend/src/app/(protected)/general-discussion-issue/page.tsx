@@ -47,12 +47,6 @@ const confirmActionLabel: Record<ConfirmAction, string> = {
   permanent_delete: "Permanently Delete",
 };
 
-const confirmButtonLabel: Record<ConfirmAction, string> = {
-  inactive: "Inactive",
-  restore: "Restore",
-  permanent_delete: "Permanently Delete",
-};
-
 type PageMessage = {
   type: "success" | "error";
   text: string;
