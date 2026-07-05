@@ -37,7 +37,6 @@ async def list_meeting_type(
         page_size=page_size,
         search=search,
         is_active=is_active,
-        meeting_type=meeting_type,
         status_filter=status_filter,
         sort_by=sort_by,
         sort_order=sort_order,
@@ -129,3 +128,5 @@ async def permanent_delete_meeting_type(
 ):
     service = MeetingTypeService(db)
     return await service.permanent_delete_meeting_type(meeting_type_id)
+
+
