@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import BigInteger, Date, Integer, String, Text
+from sqlalchemy import BigInteger, Date, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import ActiveStatusMixin, AuditMixin, Base
@@ -14,6 +14,19 @@ class MeetingMaster(ActiveStatusMixin, AuditMixin, Base):
         primary_key=True,
         index=True,
         autoincrement=True,
+    )
+
+    meeting_name: Mapped[str] = mapped_column(
+        String(150),
+        index=True,
+        nullable=False,
+    )
+
+    meeting_type_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("meeting_type.meeting_type_id"),
+        index=True,
+        nullable=False,
     )
 
     meeting_type: Mapped[str] = mapped_column(

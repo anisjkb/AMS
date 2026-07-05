@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MeetingMasterBase(BaseModel):
+    meeting_name: str = Field(..., min_length=2, max_length=150)
+    meeting_type_id: int = Field(..., gt=0)
     meeting_type: str = Field(..., min_length=2, max_length=50)
     client_id: int = Field(..., gt=0)
     client_code: str = Field(..., min_length=1, max_length=10)
@@ -16,6 +18,7 @@ class MeetingMasterBase(BaseModel):
     status: str = Field(default="active", min_length=2, max_length=20)
 
     @field_validator(
+        "meeting_name",
         "meeting_type",
         "client_code",
         "audit_year",
@@ -44,6 +47,8 @@ class MeetingMasterCreate(MeetingMasterBase):
 
 
 class MeetingMasterUpdate(BaseModel):
+    meeting_name: str | None = Field(default=None, min_length=2, max_length=150)
+    meeting_type_id: int | None = Field(default=None, gt=0)
     meeting_type: str | None = Field(default=None, min_length=2, max_length=50)
     client_id: int | None = Field(default=None, gt=0)
     client_code: str | None = Field(default=None, min_length=1, max_length=10)
@@ -57,6 +62,7 @@ class MeetingMasterUpdate(BaseModel):
     is_active: bool | None = None
 
     @field_validator(
+        "meeting_name",
         "meeting_type",
         "client_code",
         "audit_year",
@@ -80,6 +86,8 @@ class MeetingMasterResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     meeting_id: int
+    meeting_name: str
+    meeting_type_id: int
     meeting_type: str
     client_id: int
     client_code: str

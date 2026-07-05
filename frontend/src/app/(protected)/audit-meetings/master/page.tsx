@@ -1,30 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import {
-  AlertTriangle,
-  CalendarCheck,
-  Loader2,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useModuleActions } from "@/hooks/useModuleActions";
-import CrudDrawer from "@/components/crud/CrudDrawer";
-import CrudPagination from "@/components/crud/CrudPagination";
-import { CrudPillBadge, CrudStatusBadge } from "@/components/crud/CrudStatusBadge";
-import CrudToolbar from "@/components/crud/CrudToolbar";
-import {
-  DEFAULT_CRUD_PAGE_SIZE,
-  type CrudPageSizeOption,
-} from "@/components/crud/crudConstants";
-import CrudDateField from "@/components/crud/fields/CrudDateField";
-import CrudSelectField from "@/components/crud/fields/CrudSelectField";
-import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
-import CrudTextField from "@/components/crud/fields/CrudTextField";
 import {
   createMeetingMaster,
   deactivateMeetingMaster,
@@ -33,37 +10,35 @@ import {
   restoreMeetingMaster,
   updateMeetingMaster,
   type MeetingMaster,
-  type MeetingMasterPayload,
 } from "@/services/meetingMaster";
-import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
+import { listMeetingTypes, type MeetingType } from "@/services/meetingType";
 
-type StatusFilter = "all" | "active" | "inactive";
-type DrawerMode = "create" | "edit";
-type ConfirmAction = "inactive" | "restore" | "permanent_delete";
-type SaveMode = "add_another" | "close";
-
-const confirmActionLabel: Record<ConfirmAction, string> = {
-  inactive: "Inactive",
-  restore: "Restore",
-  permanent_delete: "Permanently Delete",
+type AuditEntity = {
+  entity_id?: number;
+  client_id?: number;
+  id?: number;
+  entity_code?: string;
+  client_code?: string;
+  code?: string;
+  entity_name?: string;
+  client_name?: string;
+  name?: string;
+  entity_type?: string;
+  type?: string;
 };
 
-const confirmButtonLabel: Record<ConfirmAction, string> = {
-  inactive: "Inactive",
-  restore: "Restore",
-  permanent_delete: "Permanently Delete",
-};
-
-type PageMessage = {
-  type: "success" | "error";
-  text: string;
+type AuditEntityListResponse = {
+  total: number;
+  page: number;
+  page_size: number;
+  items: AuditEntity[];
 };
 
 type FormState = {
-  meeting_type: string;
+  meeting_name: string;
+  meeting_type_id: string;
   entity_type: string;
-  client_id: string;
-  client_code: string;
+  client_key: string;
   audit_year: string;
   meeting_date: string;
   audit_start_date: string;
@@ -74,10 +49,10 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
-  meeting_type: "",
+  meeting_name: "",
+  meeting_type_id: "",
   entity_type: "",
-  client_id: "",
-  client_code: "",
+  client_key: "",
   audit_year: "",
   meeting_date: "",
   audit_start_date: "",
@@ -87,1018 +62,721 @@ const emptyForm: FormState = {
   status: "active",
 };
 
-const statusOptions = [
-  { value: "active", label: "Active" },
-  { value: "draft", label: "Draft" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-  { value: "inactive", label: "Inactive" },
-];
+async function requestJson<T>(input: string): Promise<T> {
+  const response = await fetch(input, {
+    cache: "no-store",
+  });
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "-";
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
 
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
+    try {
+      const data = await response.json();
+      message = data?.detail || data?.message || message;
+    } catch {
+      // Keep default message.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as T;
 }
 
-function toTitle(value: string | null | undefined) {
-  if (!value) return "-";
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
 
-  return value
-    .replaceAll("_", " ")
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  return "Something went wrong.";
 }
 
-function buildFormFromItem(item: MeetingMaster): FormState {
-  return {
-    meeting_type: item.meeting_type,
-    entity_type: "",
-    client_id: String(item.client_id),
-    client_code: item.client_code,
-    audit_year: item.audit_year,
-    meeting_date: item.meeting_date,
-    audit_start_date: item.audit_start_date,
-    audit_end_date: item.audit_end_date,
-    meeting_venue: item.meeting_venue,
-    meeting_note1: item.meeting_note1,
-    status: item.status,
-  };
+function getEntityId(entity: AuditEntity): number {
+  return Number(entity.client_id ?? entity.entity_id ?? entity.id ?? 0);
 }
 
-function buildPayload(form: FormState): MeetingMasterPayload {
-  return {
-    meeting_type: form.meeting_type.trim(),
-    client_id: Number.parseInt(form.client_id, 10),
-    client_code: form.client_code.trim(),
-    audit_year: form.audit_year.trim(),
-    meeting_date: form.meeting_date,
-    audit_start_date: form.audit_start_date,
-    audit_end_date: form.audit_end_date,
-    meeting_venue: form.meeting_venue.trim(),
-    meeting_note1: form.meeting_note1.trim(),
-    status: form.status.trim(),
-  };
+function getEntityCode(entity: AuditEntity): string {
+  return String(entity.client_code ?? entity.entity_code ?? entity.code ?? "");
+}
+
+function getEntityName(entity: AuditEntity): string {
+  return String(entity.client_name ?? entity.entity_name ?? entity.name ?? getEntityCode(entity));
+}
+
+function getEntityType(entity: AuditEntity): string {
+  return String(entity.entity_type ?? entity.type ?? "General");
+}
+
+function getEntityKey(entity: AuditEntity): string {
+  return `${getEntityId(entity)}::${getEntityCode(entity)}`;
+}
+
+function toDateValue(value: string): string {
+  return value ? value.slice(0, 10) : "";
 }
 
 export default function MeetingMasterPage() {
-  const meetingMasterActions = useModuleActions("meeting_master");
-
   const [items, setItems] = useState<MeetingMaster[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] =
-    useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
+  const [meetingTypes, setMeetingTypes] = useState<MeetingType[]>([]);
+  const [auditEntities, setAuditEntities] = useState<AuditEntity[]>([]);
+
   const [total, setTotal] = useState(0);
-
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [activeFilter, setActiveFilter] = useState("active");
 
-  const [entityTypeOptions, setEntityTypeOptions] = useState<string[]>([]);
-  const [entityOptions, setEntityOptions] = useState<AuditEntity[]>([]);
-  const [entityLoading, setEntityLoading] = useState(false);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [selectedItem, setSelectedItem] = useState<MeetingMaster | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [submitLoading, setSubmitLoading] = useState(false);
-  const [message, setMessage] = useState<PageMessage | null>(null);
-
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
-  const [selectedItem, setSelectedItem] = useState<MeetingMaster | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
-
-  const [confirmItem, setConfirmItem] = useState<MeetingMaster | null>(null);
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-
-  
-  const [sessionCreatedCount, setSessionCreatedCount] = useState(0);
-  const [saveMode, setSaveMode] = useState<SaveMode>("close");
-  const formRef = useRef<HTMLFormElement | null>(null);
-const debouncedSearch = useDebouncedValue(search, 400);
-
-  const numericPageSize = useMemo(() => {
-    if (pageSize === "all") {
-      return Math.max(Math.min(total || 100, 100), 1);
-    }
-
-    return Number(pageSize);
-  }, [pageSize, total]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   const totalPages = useMemo(() => {
-    if (pageSize === "all") return 1;
+    return Math.max(1, Math.ceil(total / pageSize));
+  }, [pageSize, total]);
 
-    return Math.max(Math.ceil(total / numericPageSize), 1);
-  }, [numericPageSize, pageSize, total]);
+  const isActiveValue = useMemo(() => {
+    if (activeFilter === "active") return true;
+    if (activeFilter === "inactive") return false;
+    return undefined;
+  }, [activeFilter]);
 
-  const isActiveFilter = useMemo(() => {
-    if (statusFilter === "all") return undefined;
+  const entityTypes = useMemo(() => {
+    return Array.from(new Set(auditEntities.map(getEntityType))).sort();
+  }, [auditEntities]);
 
-    return statusFilter === "active";
-  }, [statusFilter]);
-
-  const showTopActions = meetingMasterActions.showTopActions;
-  const showRowActions = meetingMasterActions.showRowActions;
-  const tableColumnCount = showRowActions ? 11 : 10;
-
-  const loadEntityTypes = useCallback(async () => {
-    try {
-      const response = await listAuditEntities({
-        page: 1,
-        pageSize: 100,
-        isActive: true,
-        sortBy: "entity_type",
-        sortOrder: "asc",
-      });
-
-      const types = Array.from(
-        new Set(
-          response.items
-            .map((item) => item.entity_type)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ).sort((left, right) => left.localeCompare(right));
-
-      setEntityTypeOptions(types);
-    } catch {
-      setEntityTypeOptions([]);
-    }
-  }, []);
-
-  const loadEntityOptions = useCallback(async (entityType: string) => {
-    if (!entityType) {
-      setEntityOptions([]);
-      return;
+  const filteredEntities = useMemo(() => {
+    if (!form.entity_type) {
+      return auditEntities;
     }
 
-    setEntityLoading(true);
+    return auditEntities.filter((entity) => getEntityType(entity) === form.entity_type);
+  }, [auditEntities, form.entity_type]);
 
-    try {
-      const response = await listAuditEntities({
-        page: 1,
-        pageSize: 100,
-        isActive: true,
-        entityType,
-        sortBy: "entity_name",
-        sortOrder: "asc",
-      });
+  const selectedMeetingType = useMemo(() => {
+    return meetingTypes.find(
+      (item) => String(item.meeting_type_id) === form.meeting_type_id,
+    );
+  }, [form.meeting_type_id, meetingTypes]);
 
-      setEntityOptions(response.items);
-    } catch {
-      setEntityOptions([]);
-    } finally {
-      setEntityLoading(false);
-    }
-  }, []);
-
-  const hydrateSelectedEntityForEdit = useCallback(
-    async (item: MeetingMaster) => {
-      try {
-        const response = await listAuditEntities({
-          page: 1,
-          pageSize: 100,
-          search: item.client_code,
-          isActive: true,
-          sortBy: "entity_name",
-          sortOrder: "asc",
-        });
-
-        const selectedEntity =
-          response.items.find((entity) => entity.id === item.client_id) ??
-          response.items.find((entity) => entity.entity_code === item.client_code);
-
-        if (!selectedEntity) return;
-
-        const sameTypeEntities = response.items.filter(
-          (entity) => entity.entity_type === selectedEntity.entity_type,
-        );
-
-        setEntityOptions(sameTypeEntities.length > 0 ? sameTypeEntities : [selectedEntity]);
-        setForm((current) => ({
-          ...current,
-          entity_type: selectedEntity.entity_type,
-          client_id: String(selectedEntity.id),
-          client_code: selectedEntity.entity_code,
-        }));
-      } catch {
-        setForm((current) => ({
-          ...current,
-          entity_type: "",
-          client_id: String(item.client_id),
-          client_code: item.client_code,
-        }));
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      void loadEntityTypes();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [loadEntityTypes]);
-
-  useEffect(() => {
-    if (!drawerOpen || !form.entity_type) return;
-
-    const timerId = window.setTimeout(() => {
-      void loadEntityOptions(form.entity_type);
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [drawerOpen, form.entity_type, loadEntityOptions]);
+  const selectedEntity = useMemo(() => {
+    return auditEntities.find((entity) => getEntityKey(entity) === form.client_key);
+  }, [auditEntities, form.client_key]);
 
   const loadMeetingMaster = useCallback(async () => {
     setIsLoading(true);
-    setMessage(null);
+    setError("");
 
     try {
       const response = await listMeetingMaster({
         page,
-        pageSize: numericPageSize,
-        search: debouncedSearch,
-        isActive: isActiveFilter,
+        page_size: pageSize,
+        search: search.trim() || undefined,
+        sort_by: "meeting_id",
+        sort_order: "desc",
+        is_active: isActiveValue,
       });
 
       setItems(response.items);
       setTotal(response.total);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to load Meeting Master records.";
-
-      setMessage({ type: "error", text: errorMessage });
-      setItems([]);
-      setTotal(0);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, isActiveFilter, numericPageSize, page]);
+  }, [isActiveValue, page, pageSize, search]);
+
+  const loadLookups = useCallback(async () => {
+    try {
+      const [meetingTypeResponse, entityResponse] = await Promise.all([
+        listMeetingTypes({
+          page: 1,
+          page_size: 100,
+          sort_by: "meeting_type_name",
+          sort_order: "asc",
+          is_active: true,
+        }),
+        requestJson<AuditEntityListResponse>(
+          "/api/backend/audit-entities?page=1&page_size=100&sort_by=entity_type&sort_order=asc&is_active=true",
+        ),
+      ]);
+
+      setMeetingTypes(meetingTypeResponse.items);
+      setAuditEntities(entityResponse.items);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
+    }
+  }, []);
 
   useEffect(() => {
-    const timerId = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       void loadMeetingMaster();
     }, 0);
 
-    return () => {
-      window.clearTimeout(timerId);
-    };
+    return () => window.clearTimeout(timeoutId);
   }, [loadMeetingMaster]);
 
-  const resetToFirstPage = () => {
-    setPage(1);
-  };
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadLookups();
+    }, 0);
 
-  
-  const focusMeetingTypeField = () => {
-    window.setTimeout(() => {
-      const meetingTypeInput = formRef.current?.querySelector<HTMLInputElement>(
-        'input[placeholder="Example: Planning"]',
-      );
+    return () => window.clearTimeout(timeoutId);
+  }, [loadLookups]);
 
-      meetingTypeInput?.focus();
-      meetingTypeInput?.select();
-    }, 80);
-  };
-const openCreateDrawer = () => {
-    setDrawerMode("create");
+  const openCreateForm = () => {
     setSelectedItem(null);
     setForm(emptyForm);
-    setSessionCreatedCount(0);
-    setSaveMode("close");
-    setMessage(null);
-    setDrawerOpen(true);
-    focusMeetingTypeField();
+    setMessage("");
+    setError("");
+    setIsFormOpen(true);
   };
 
-  const openEditDrawer = (item: MeetingMaster) => {
-    setDrawerMode("edit");
+  const openEditForm = (item: MeetingMaster) => {
+    const matchedEntity = auditEntities.find(
+      (entity) =>
+        getEntityId(entity) === Number(item.client_id) ||
+        getEntityCode(entity) === item.client_code,
+    );
+
     setSelectedItem(item);
-    setForm(buildFormFromItem(item));
-    setSessionCreatedCount(0);
-    setSaveMode("close");
-    setMessage(null);
-    setDrawerOpen(true);
-    void hydrateSelectedEntityForEdit(item);
-    focusMeetingTypeField();
+    setForm({
+      meeting_name: item.meeting_name,
+      meeting_type_id: String(item.meeting_type_id),
+      entity_type: matchedEntity ? getEntityType(matchedEntity) : "",
+      client_key: matchedEntity ? getEntityKey(matchedEntity) : "",
+      audit_year: item.audit_year,
+      meeting_date: toDateValue(item.meeting_date),
+      audit_start_date: toDateValue(item.audit_start_date),
+      audit_end_date: toDateValue(item.audit_end_date),
+      meeting_venue: item.meeting_venue,
+      meeting_note1: item.meeting_note1,
+      status: item.status,
+    });
+    setMessage("");
+    setError("");
+    setIsFormOpen(true);
   };
 
-  const closeDrawer = () => {
-    if (submitLoading) return;
-
-    setDrawerOpen(false);
+  const closeForm = () => {
+    setIsFormOpen(false);
     setSelectedItem(null);
     setForm(emptyForm);
-    setSessionCreatedCount(0);
-    setSaveMode("close");
   };
 
-  const openConfirm = (item: MeetingMaster, action: ConfirmAction) => {
-    setConfirmItem(item);
-    setConfirmAction(action);
-  };
-
-  const closeConfirm = () => {
-    if (submitLoading) return;
-
-    setConfirmItem(null);
-    setConfirmAction(null);
-  };
-
-  const validateForm = () => {
-    const requiredFields: Array<[keyof FormState, string]> = [
-      ["meeting_type", "Meeting type is required."],
-      ["entity_type", "Entity type is required."],
-      ["client_id", "Client / Entity is required."],
-      ["client_code", "Client / Entity code is required."],
-      ["audit_year", "Audit year is required."],
-      ["meeting_date", "Meeting date is required."],
-      ["audit_start_date", "Audit start date is required."],
-      ["audit_end_date", "Audit end date is required."],
-      ["meeting_venue", "Meeting venue is required."],
-      ["meeting_note1", "Meeting note is required."],
-      ["status", "Status is required."],
-    ];
-
-    for (const [field, errorText] of requiredFields) {
-      if (!form[field].trim()) {
-        setMessage({ type: "error", text: errorText });
-        return false;
-      }
+  const buildPayload = () => {
+    if (!selectedMeetingType) {
+      throw new Error("Meeting type is required.");
     }
 
-    const clientId = Number.parseInt(form.client_id, 10);
-    if (Number.isNaN(clientId) || clientId <= 0) {
-      setMessage({ type: "error", text: "Client ID must be a valid positive number." });
-      return false;
+    if (!selectedEntity) {
+      throw new Error("Client / Entity is required.");
     }
 
-    if (form.audit_end_date < form.audit_start_date) {
-      setMessage({
-        type: "error",
-        text: "Audit end date cannot be before audit start date.",
-      });
-      return false;
-    }
-
-    return true;
+    return {
+      meeting_name: form.meeting_name.trim(),
+      meeting_type_id: selectedMeetingType.meeting_type_id,
+      meeting_type: selectedMeetingType.meeting_type_name,
+      client_id: getEntityId(selectedEntity),
+      client_code: getEntityCode(selectedEntity),
+      audit_year: form.audit_year.trim(),
+      meeting_date: form.meeting_date,
+      audit_start_date: form.audit_start_date,
+      audit_end_date: form.audit_end_date,
+      meeting_venue: form.meeting_venue.trim(),
+      meeting_note1: form.meeting_note1.trim(),
+      status: form.status,
+    };
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!validateForm()) return;
-
-    setSubmitLoading(true);
-    setMessage(null);
+    setIsSaving(true);
+    setError("");
+    setMessage("");
 
     try {
-      if (drawerMode === "create") {
-        await createMeetingMaster(buildPayload(form));
-        await loadMeetingMaster();
-
-        if (saveMode === "add_another") {
-          setSessionCreatedCount((current) => current + 1);
-          setForm((current) => ({
-            ...emptyForm,
-            entity_type: current.entity_type,
-            client_id: current.client_id,
-            client_code: current.client_code,
-            audit_year: current.audit_year,
-            audit_start_date: current.audit_start_date,
-            audit_end_date: current.audit_end_date,
-            status: current.status || "active",
-          }));
-
-          setMessage({
-            type: "success",
-            text: "Meeting Master record saved. Add another meeting below.",
-          });
-          focusMeetingTypeField();
-          return;
-        }
-
-        setDrawerOpen(false);
-        setSelectedItem(null);
-        setForm(emptyForm);
-        setSessionCreatedCount(0);
-
-        setMessage({
-          type: "success",
-          text: "Meeting Master record created successfully.",
-        });
-        return;
-      }
+      const payload = buildPayload();
 
       if (selectedItem) {
-        await updateMeetingMaster(selectedItem.meeting_id, buildPayload(form));
-        await loadMeetingMaster();
-
-        setDrawerOpen(false);
-        setSelectedItem(null);
-        setForm(emptyForm);
-
-        setMessage({
-          type: "success",
-          text: "Meeting Master record updated successfully.",
-        });
+        const response = await updateMeetingMaster(selectedItem.meeting_id, payload);
+        setMessage(response.message);
+      } else {
+        const response = await createMeetingMaster(payload);
+        setMessage(response.message);
       }
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Meeting Master request failed.";
 
-      setMessage({ type: "error", text: errorMessage });
+      closeForm();
+      await loadMeetingMaster();
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
     } finally {
-      setSubmitLoading(false);
+      setIsSaving(false);
     }
   };
 
-  const handleConfirmAction = async () => {
-    if (!confirmItem || !confirmAction) return;
-
-    setSubmitLoading(true);
-    setMessage(null);
+  const handleDeactivate = async (item: MeetingMaster) => {
+    if (!window.confirm(`Are you sure you want to inactive "${item.meeting_name}"?`)) {
+      return;
+    }
 
     try {
-      if (confirmAction === "inactive") {
-        await deactivateMeetingMaster(confirmItem.meeting_id);
-        setMessage({
-          type: "success",
-          text: "Meeting Master record marked inactive successfully.",
-        });
-      }
-
-      if (confirmAction === "restore") {
-        await restoreMeetingMaster(confirmItem.meeting_id);
-        setMessage({
-          type: "success",
-          text: "Meeting Master record restored successfully.",
-        });
-      }
-
-      if (confirmAction === "permanent_delete") {
-        await permanentDeleteMeetingMaster(confirmItem.meeting_id);
-        setMessage({
-          type: "success",
-          text: "Meeting Master record permanently deleted successfully.",
-        });
-      }
-
-      closeConfirm();
+      const response = await deactivateMeetingMaster(item.meeting_id);
+      setMessage(response.message);
       await loadMeetingMaster();
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Action failed.";
-
-      setMessage({ type: "error", text: errorMessage });
-    } finally {
-      setSubmitLoading(false);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
     }
+  };
+
+  const handleRestore = async (item: MeetingMaster) => {
+    if (!window.confirm(`Are you sure you want to restore "${item.meeting_name}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await restoreMeetingMaster(item.meeting_id);
+      setMessage(response.message);
+      await loadMeetingMaster();
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
+    }
+  };
+
+  const handlePermanentDelete = async (item: MeetingMaster) => {
+    if (!window.confirm(`Permanently delete "${item.meeting_name}"? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await permanentDeleteMeetingMaster(item.meeting_id);
+      setMessage(response.message);
+      await loadMeetingMaster();
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError));
+    }
+  };
+
+  const resetFilters = () => {
+    setSearch("");
+    setActiveFilter("active");
+    setPage(1);
   };
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-linear-to-r from-slate-950 to-blue-950 p-6 text-white">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-widest text-blue-200">
-                Audit Meeting
-              </p>
-              <h1 className="mt-2 text-3xl font-black">Meeting Master</h1>
-              <p className="mt-2 max-w-3xl text-sm font-medium text-slate-300">
-                Maintain audit meeting information, client reference, audit
-                period, venue, meeting date, notes, and workflow status.
-              </p>
-            </div>
-
-            {showTopActions ? (
-              <div className="flex flex-wrap gap-2">
-                {meetingMasterActions.canCreate ? (
-                  <button
-                    onClick={openCreateDrawer}
-                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-blue-50"
-                  >
-                    <Plus size={18} />
-                    Create
-                  </button>
-                ) : null}
-
-                {meetingMasterActions.canExport ? (
-                  <button className="rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">
-                    Export
-                  </button>
-                ) : null}
-
-                {meetingMasterActions.canImport ? (
-                  <button className="rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">
-                    Import
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+    <main className="space-y-6 p-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
+              Audit Meetings
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold text-slate-950">
+              Meeting Master
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              Maintain meeting records with normalized meeting type and meeting name.
+            </p>
           </div>
-        </div>
 
-        <CrudToolbar
-          pageSize={pageSize}
-          onPageSizeChange={(value) => {
-            setPageSize(value as CrudPageSizeOption);
-            resetToFirstPage();
-          }}
-          onRefresh={loadMeetingMaster}
-          onReset={() => {
-            setSearch("");
-            setStatusFilter("all");
-            setPageSize(DEFAULT_CRUD_PAGE_SIZE);
-            resetToFirstPage();
-          }}
-          filters={[
-            {
-              key: "search",
-              label: "Search",
-              type: "search",
-              value: search,
-              placeholder: "Search type, client code, year, venue, status...",
-              onChange: (value) => {
-                setSearch(value);
-                resetToFirstPage();
-              },
-            },
-            {
-              key: "status",
-              label: "Status",
-              type: "select",
-              value: statusFilter,
-              options: [
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ],
-              onChange: (value) => {
-                setStatusFilter(value as StatusFilter);
-                resetToFirstPage();
-              },
-            },
-          ]}
-        />
-
-        {message && !drawerOpen ? (
-          <div
-            className={`border-b px-5 py-3 text-sm font-bold ${
-              message.type === "success"
-                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-                : "border-rose-100 bg-rose-50 text-rose-700"
-            }`}
+          <button
+            type="button"
+            onClick={openCreateForm}
+            className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
           >
-            {message.text}
-          </div>
-        ) : null}
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
-            <thead className="bg-slate-50">
-              <tr className="text-left text-xs font-black uppercase tracking-wider text-slate-500">
-                <th className="px-5 py-4">ID</th>
-                <th className="px-5 py-4">Meeting Type</th>
-                <th className="px-5 py-4">Client</th>
-                <th className="px-5 py-4">Audit Year</th>
-                <th className="px-5 py-4">Meeting Date</th>
-                <th className="px-5 py-4">Audit Period</th>
-                <th className="px-5 py-4">Venue</th>
-                <th className="px-5 py-4">Workflow</th>
-                <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Created</th>
-                {showRowActions ? (
-                  <th className="px-5 py-4 text-right">Action</th>
-                ) : null}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={tableColumnCount} className="px-5 py-12">
-                    <div className="flex items-center justify-center gap-3 text-slate-500">
-                      <Loader2 className="animate-spin" size={22} />
-                      Loading Meeting Master records...
-                    </div>
-                  </td>
-                </tr>
-              ) : null}
-
-              {!isLoading && items.length === 0 ? (
-                <tr>
-                  <td colSpan={tableColumnCount} className="px-5 py-12">
-                    <div className="text-center">
-                      <CalendarCheck
-                        size={42}
-                        className="mx-auto text-slate-300"
-                      />
-                      <p className="mt-3 text-sm font-black text-slate-600">
-                        No Meeting Master records found
-                      </p>
-                      <p className="mt-1 text-sm text-slate-400">
-                        Create a meeting record to begin audit meeting tracking.
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              ) : null}
-
-              {!isLoading
-                ? items.map((item) => (
-                    <tr key={item.meeting_id} className="hover:bg-slate-50">
-                      <td className="px-5 py-4 text-sm font-black text-slate-900">
-                        #{item.meeting_id}
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="text-sm font-black text-slate-800">
-                          {item.meeting_type}
-                        </div>
-                        <div className="mt-1 text-xs font-medium text-slate-400">
-                          {item.meeting_note1.slice(0, 70)}
-                          {item.meeting_note1.length > 70 ? "..." : ""}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="text-sm font-bold text-slate-700">
-                          {item.client_code}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          ID: {item.client_id}
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-sm font-bold text-slate-600">
-                        {item.audit_year}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-500">
-                        {formatDate(item.meeting_date)}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-500">
-                        {formatDate(item.audit_start_date)} →{" "}
-                        {formatDate(item.audit_end_date)}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-500">
-                        {item.meeting_venue}
-                      </td>
-                      <td className="px-5 py-4">
-                        <CrudPillBadge>{toTitle(item.status)}</CrudPillBadge>
-                      </td>
-                      <td className="px-5 py-4">
-                        <CrudStatusBadge active={item.is_active} />
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-500">
-                        {formatDate(item.created_at)}
-                      </td>
-
-                      {showRowActions ? (
-                        <td className="px-5 py-4">
-                          <div className="flex justify-end gap-2">
-                            {meetingMasterActions.canUpdate ? (
-                              <button
-                                onClick={() => openEditDrawer(item)}
-                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-amber-50 hover:text-amber-600"
-                                title="Edit"
-                              >
-                                <Pencil size={16} />
-                              </button>
-                            ) : null}
-
-                            {item.is_active && meetingMasterActions.canDelete ? (
-                              <button
-                                onClick={() => openConfirm(item, "inactive")}
-                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
-                                title="Inactive"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            ) : null}
-
-                            {!item.is_active && meetingMasterActions.canRestore ? (
-                              <button
-                                onClick={() => openConfirm(item, "restore")}
-                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-green-50 hover:text-green-600"
-                                title="Restore"
-                              >
-                                <RotateCcw size={16} />
-                              </button>
-                            ) : null}
-
-                            {!item.is_active &&
-                            meetingMasterActions.canPermanentDelete ? (
-                              <button
-                                onClick={() =>
-                                  openConfirm(item, "permanent_delete")
-                                }
-                                className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-600 transition hover:bg-red-100"
-                                title="Permanent Delete"
-                              >
-                                <AlertTriangle size={16} />
-                              </button>
-                            ) : null}
-                          </div>
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))
-                : null}
-            </tbody>
-          </table>
+            Create Meeting
+          </button>
         </div>
-
-        <CrudPagination
-          page={page}
-          totalPages={totalPages}
-          total={total}
-          pageSize={numericPageSize}
-          onPageChange={setPage}
-        />
       </section>
 
-      <CrudDrawer
-        isOpen={drawerOpen}
-        onClose={closeDrawer}
-        title="Meeting Master"
-        description={
-          drawerMode === "create"
-            ? sessionCreatedCount > 0
-              ? `Create — ${sessionCreatedCount} meeting${sessionCreatedCount === 1 ? "" : "s"} added in this session`
-              : "Create"
-            : "Edit"
-        }
-        maxWidthClassName="max-w-3xl"
-        footer={
-          <>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-5">
+          <input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search meeting..."
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:col-span-2"
+          />
+
+          <select
+            value={activeFilter}
+            onChange={(event) => {
+              setActiveFilter(event.target.value);
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="all">All</option>
+          </select>
+
+          <select
+            value={pageSize}
+            onChange={(event) => {
+              setPageSize(Number(event.target.value));
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value={10}>10 / page</option>
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
+          </select>
+
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={closeDrawer}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              onClick={() => void loadMeetingMaster()}
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
-              Cancel
+              Refresh
             </button>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      </section>
 
-            {drawerMode === "create" ? (
-              <>
-                <button
-                  type="submit"
-                  form="meeting-master-form"
-                  disabled={submitLoading}
-                  onClick={() => setSaveMode("close")}
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitLoading && saveMode === "close" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CalendarCheck className="h-4 w-4" />
-                  )}
-                  Save & Close
-                </button>
+      {message ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {message}
+        </div>
+      ) : null}
 
-                <button
-                  type="submit"
-                  form="meeting-master-form"
-                  disabled={submitLoading}
-                  onClick={() => setSaveMode("add_another")}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitLoading && saveMode === "add_another" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                  Save & Add Another
-                </button>
-              </>
-            ) : (
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      {isFormOpen ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-950">
+              {selectedItem ? "Edit Meeting" : "Create Meeting"}
+            </h2>
+            <button
+              type="button"
+              onClick={closeForm}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Meeting Name *</span>
+              <input
+                value={form.meeting_name}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, meeting_name: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                maxLength={150}
+                required
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Meeting Type *</span>
+              <select
+                value={form.meeting_type_id}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, meeting_type_id: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select meeting type</option>
+                {meetingTypes.map((item) => (
+                  <option key={item.meeting_type_id} value={item.meeting_type_id}>
+                    {item.meeting_type_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Status</span>
+              <select
+                value={form.status}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, status: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Entity Type</span>
+              <select
+                value={form.entity_type}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    entity_type: event.target.value,
+                    client_key: "",
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">All entity types</option>
+                {entityTypes.map((entityType) => (
+                  <option key={entityType} value={entityType}>
+                    {entityType}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Client / Entity *</span>
+              <select
+                value={form.client_key}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, client_key: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select client / entity</option>
+                {filteredEntities.map((entity) => (
+                  <option key={getEntityKey(entity)} value={getEntityKey(entity)}>
+                    {getEntityCode(entity)} - {getEntityName(entity)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Audit Year *</span>
+              <input
+                value={form.audit_year}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, audit_year: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Meeting Date *</span>
+              <input
+                type="date"
+                value={form.meeting_date}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, meeting_date: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Audit Start Date *</span>
+              <input
+                type="date"
+                value={form.audit_start_date}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, audit_start_date: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Audit End Date *</span>
+              <input
+                type="date"
+                value={form.audit_end_date}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, audit_end_date: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Meeting Venue *</span>
+              <input
+                value={form.meeting_venue}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, meeting_venue: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </label>
+
+            <label className="space-y-1 md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Meeting Note *</span>
+              <textarea
+                value={form.meeting_note1}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, meeting_note1: event.target.value }))
+                }
+                className="min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </label>
+
+            <div className="flex gap-3 md:col-span-2">
               <button
                 type="submit"
-                form="meeting-master-form"
-                disabled={submitLoading}
-                onClick={() => setSaveMode("close")}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isSaving}
+                className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CalendarCheck className="h-4 w-4" />
-                )}
-                Update
+                {isSaving ? "Saving..." : selectedItem ? "Update" : "Save"}
               </button>
-            )}
-          </>
-        }
-      >
-        <form
-          ref={formRef}
-          id="meeting-master-form"
-          onSubmit={handleSubmit}
-          className="space-y-5"
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <CrudTextField
-              label="Meeting Type"
-              value={form.meeting_type}
-              required
-              placeholder="Example: Planning"
-              onChange={(value) =>
-                setForm((current) => ({ ...current, meeting_type: value }))
-              }
-            />
 
-            <CrudSelectField
-              label="Status"
-              value={form.status}
-              options={statusOptions}
-              onChange={(value) =>
-                setForm((current) => ({ ...current, status: value }))
-              }
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <CrudSelectField
-              label="Entity Type"
-              value={form.entity_type}
-              options={[
-                { value: "", label: "Select Entity Type" },
-                ...entityTypeOptions.map((type) => ({
-                  value: type,
-                  label: toTitle(type),
-                })),
-              ]}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  entity_type: value,
-                  client_id: "",
-                  client_code: "",
-                }))
-              }
-            />
-
-            <CrudSelectField
-              label="Client / Entity"
-              value={form.client_id}
-              options={[
-                {
-                  value: "",
-                  label: entityLoading
-                    ? "Loading entities..."
-                    : form.entity_type
-                      ? "Select Entity"
-                      : "Select Entity Type First",
-                },
-                ...entityOptions.map((entity) => ({
-                  value: String(entity.id),
-                  label: `${entity.entity_name} (${entity.entity_code})`,
-                })),
-              ]}
-              onChange={(value) => {
-                const selectedEntity = entityOptions.find(
-                  (entity) => String(entity.id) === value,
-                );
-
-                setForm((current) => ({
-                  ...current,
-                  client_id: value,
-                  client_code: selectedEntity?.entity_code ?? "",
-                }));
-              }}
-            />
-
-            <CrudTextField
-              label="Audit Year"
-              value={form.audit_year}
-              required
-              placeholder="Example: 2026"
-              onChange={(value) =>
-                setForm((current) => ({ ...current, audit_year: value }))
-              }
-            />
-          </div>
-
-          {form.client_code ? (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
-              Selected Entity Code: {form.client_code}
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <CrudDateField
-              label="Meeting Date"
-              value={form.meeting_date}
-              required
-              onChange={(value) =>
-                setForm((current) => ({ ...current, meeting_date: value }))
-              }
-            />
-
-            <CrudDateField
-              label="Audit Start Date"
-              value={form.audit_start_date}
-              required
-              onChange={(value) =>
-                setForm((current) => ({ ...current, audit_start_date: value }))
-              }
-            />
-
-            <CrudDateField
-              label="Audit End Date"
-              value={form.audit_end_date}
-              required
-              onChange={(value) =>
-                setForm((current) => ({ ...current, audit_end_date: value }))
-              }
-            />
-          </div>
-
-          <CrudTextField
-            label="Meeting Venue"
-            value={form.meeting_venue}
-            required
-            placeholder="Example: Head Office Meeting Room"
-            onChange={(value) =>
-              setForm((current) => ({ ...current, meeting_venue: value }))
-            }
-          />
-
-          <CrudTextAreaField
-            label="Meeting Note"
-            value={form.meeting_note1}
-            rows={5}
-            onChange={(value) =>
-              setForm((current) => ({ ...current, meeting_note1: value }))
-            }
-          />
-
-          {message && drawerOpen && message.type === "error" ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-              {message.text}
-            </div>
-          ) : null}
-        </form>
-      </CrudDrawer>
-
-      {confirmItem && confirmAction ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start gap-4">
-              <div className="rounded-2xl bg-red-50 p-3 text-red-600">
-                <AlertTriangle size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-slate-900">
-                  {confirmActionLabel[confirmAction]} Meeting Master
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Are you sure you want to{" "}
-                  <span className="font-black text-slate-700">
-                    {confirmActionLabel[confirmAction]}
-                  </span>{" "}
-                  this Meeting Master record?
-                </p>
-                <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold text-slate-700">
-                  {confirmItem.meeting_type} — {confirmItem.client_code}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={closeConfirm}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-600"
+                type="button"
+                onClick={closeForm}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
-              <button
-                onClick={handleConfirmAction}
-                disabled={submitLoading}
-                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitLoading ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : null}
-                {confirmButtonLabel[confirmAction]}
-              </button>
             </div>
+          </form>
+        </section>
+      ) : null}
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <p className="text-sm text-slate-600">
+            Total records: <span className="font-semibold">{total}</span>
+          </p>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <span className="text-sm text-slate-600">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
           </div>
         </div>
-      ) : null}
-    </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">ID</th>
+                <th className="px-4 py-3">Meeting Name</th>
+                <th className="px-4 py-3">Meeting Type</th>
+                <th className="px-4 py-3">Client Code</th>
+                <th className="px-4 py-3">Audit Year</th>
+                <th className="px-4 py-3">Meeting Date</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-200">
+              {isLoading ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={8}>
+                    Loading...
+                  </td>
+                </tr>
+              ) : items.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={8}>
+                    No meeting found.
+                  </td>
+                </tr>
+              ) : (
+                items.map((item) => (
+                  <tr key={item.meeting_id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">{item.meeting_id}</td>
+                    <td className="px-4 py-3 font-medium text-slate-950">
+                      {item.meeting_name}
+                    </td>
+                    <td className="px-4 py-3">{item.meeting_type}</td>
+                    <td className="px-4 py-3">{item.client_code}</td>
+                    <td className="px-4 py-3">{item.audit_year}</td>
+                    <td className="px-4 py-3">{toDateValue(item.meeting_date)}</td>
+                    <td className="px-4 py-3">{item.status}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditForm(item)}
+                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Edit
+                        </button>
+
+                        {item.is_active ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeactivate(item)}
+                            className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                          >
+                            Inactive
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void handleRestore(item)}
+                              className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            >
+                              Restore
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handlePermanentDelete(item)}
+                              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                            >
+                              Permanent Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
   );
 }
-
-
-
