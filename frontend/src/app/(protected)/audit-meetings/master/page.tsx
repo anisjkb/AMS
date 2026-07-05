@@ -960,16 +960,6 @@ const openCreateDrawer = () => {
           className="space-y-5"
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <CrudTextField
-              label="Meeting Name"
-              value={form.meeting_name}
-              required
-              placeholder="Example: Audit Planning Meeting"
-              onChange={(value) =>
-                setForm((current) => ({ ...current, meeting_name: value }))
-              }
-            />
-
             <CrudSelectField
               label="Meeting Type"
               value={form.meeting_type_id}
@@ -997,6 +987,16 @@ const openCreateDrawer = () => {
                   meeting_type: selectedType?.meeting_type_name ?? "",
                 }));
               }}
+            />
+
+            <CrudTextField
+              label="Meeting Name"
+              value={form.meeting_name}
+              required
+              placeholder="Example: Audit Planning Meeting"
+              onChange={(value) =>
+                setForm((current) => ({ ...current, meeting_name: value }))
+              }
             />
 
             <CrudSelectField
