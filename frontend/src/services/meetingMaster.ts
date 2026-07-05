@@ -1,5 +1,7 @@
 export type MeetingMaster = {
   meeting_id: number;
+  meeting_name: string;
+  meeting_type_id: number;
   meeting_type: string;
   client_id: number;
   client_code: string;
@@ -25,6 +27,8 @@ export type MeetingMasterListResponse = {
 };
 
 export type MeetingMasterPayload = {
+  meeting_name: string;
+  meeting_type_id: number;
   meeting_type: string;
   client_id: number;
   client_code: string;

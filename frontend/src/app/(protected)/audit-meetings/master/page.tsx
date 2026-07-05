@@ -36,6 +36,7 @@ import {
   type MeetingMasterPayload,
 } from "@/services/meetingMaster";
 import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
+import { listMeetingTypes, type MeetingType } from "@/services/meetingType";
 
 type StatusFilter = "all" | "active" | "inactive";
 type DrawerMode = "create" | "edit";
@@ -60,6 +61,8 @@ type PageMessage = {
 };
 
 type FormState = {
+  meeting_name: string;
+  meeting_type_id: string;
   meeting_type: string;
   entity_type: string;
   client_id: string;
@@ -74,6 +77,8 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
+  meeting_name: "",
+  meeting_type_id: "",
   meeting_type: "",
   entity_type: "",
   client_id: "",
@@ -118,6 +123,8 @@ function toTitle(value: string | null | undefined) {
 
 function buildFormFromItem(item: MeetingMaster): FormState {
   return {
+    meeting_name: item.meeting_name,
+    meeting_type_id: String(item.meeting_type_id),
     meeting_type: item.meeting_type,
     entity_type: "",
     client_id: String(item.client_id),
@@ -134,6 +141,8 @@ function buildFormFromItem(item: MeetingMaster): FormState {
 
 function buildPayload(form: FormState): MeetingMasterPayload {
   return {
+    meeting_name: form.meeting_name.trim(),
+    meeting_type_id: Number.parseInt(form.meeting_type_id, 10),
     meeting_type: form.meeting_type.trim(),
     client_id: Number.parseInt(form.client_id, 10),
     client_code: form.client_code.trim(),
@@ -151,6 +160,8 @@ export default function MeetingMasterPage() {
   const meetingMasterActions = useModuleActions("meeting_master");
 
   const [items, setItems] = useState<MeetingMaster[]>([]);
+  const [meetingTypes, setMeetingTypes] = useState<MeetingType[]>([]);
+  const [meetingTypeLoading, setMeetingTypeLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] =
     useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
@@ -180,6 +191,39 @@ export default function MeetingMasterPage() {
   const [saveMode, setSaveMode] = useState<SaveMode>("close");
   const formRef = useRef<HTMLFormElement | null>(null);
 const debouncedSearch = useDebouncedValue(search, 400);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setMeetingTypeLoading(true);
+
+      listMeetingTypes({
+        page: 1,
+        page_size: 100,
+        sort_by: "meeting_type_name",
+        sort_order: "asc",
+        is_active: true,
+      })
+        .then((response) => {
+          setMeetingTypes(response.items);
+        })
+        .catch((error: unknown) => {
+          setMessage({
+            type: "error",
+            text:
+              error instanceof Error
+                ? error.message
+                : "Failed to load meeting types.",
+          });
+        })
+        .finally(() => {
+          setMeetingTypeLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, []);
 
   const numericPageSize = useMemo(() => {
     if (pageSize === "all") {
@@ -418,6 +462,8 @@ const openCreateDrawer = () => {
 
   const validateForm = () => {
     const requiredFields: Array<[keyof FormState, string]> = [
+      ["meeting_name", "Meeting name is required."],
+      ["meeting_type_id", "Meeting type is required."],
       ["meeting_type", "Meeting type is required."],
       ["entity_type", "Entity type is required."],
       ["client_id", "Client / Entity is required."],
@@ -908,13 +954,42 @@ const openCreateDrawer = () => {
         >
           <div className="grid gap-4 md:grid-cols-2">
             <CrudTextField
-              label="Meeting Type"
-              value={form.meeting_type}
+              label="Meeting Name"
+              value={form.meeting_name}
               required
-              placeholder="Example: Planning"
+              placeholder="Example: Audit Planning Meeting"
               onChange={(value) =>
-                setForm((current) => ({ ...current, meeting_type: value }))
+                setForm((current) => ({ ...current, meeting_name: value }))
               }
+            />
+
+            <CrudSelectField
+              label="Meeting Type"
+              value={form.meeting_type_id}
+              options={[
+                {
+                  value: "",
+                  label: meetingTypeLoading
+                    ? "Loading meeting types..."
+                    : "Select Meeting Type",
+                },
+                ...meetingTypes.map((meetingType) => ({
+                  value: String(meetingType.meeting_type_id),
+                  label: meetingType.meeting_type_name,
+                })),
+              ]}
+              required
+              onChange={(value) => {
+                const selectedType = meetingTypes.find(
+                  (meetingType) => String(meetingType.meeting_type_id) === value,
+                );
+
+                setForm((current) => ({
+                  ...current,
+                  meeting_type_id: value,
+                  meeting_type: selectedType?.meeting_type_name ?? "",
+                }));
+              }}
             />
 
             <CrudSelectField
@@ -1070,7 +1145,7 @@ const openCreateDrawer = () => {
                   this Meeting Master record?
                 </p>
                 <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold text-slate-700">
-                  {confirmItem.meeting_type} — {confirmItem.client_code}
+                  {confirmItem.meeting_name} - {confirmItem.client_code}
                 </p>
               </div>
             </div>
