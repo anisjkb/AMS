@@ -1,43 +1,5 @@
-async function requestJson<T>(
-  input: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const headers = new Headers(init.headers);
-
-  if (!headers.has("Content-Type") && init.body) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const response = await fetch(input, {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    let message = `Request failed with status ${response.status}`;
-
-    try {
-      const data = await response.json();
-      message = data?.detail || data?.message || message;
-    } catch {
-      // Keep default message.
-    }
-
-    throw new Error(message);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
-}
-
 export type MeetingMaster = {
   meeting_id: number;
-  meeting_name: string;
-  meeting_type_id: number;
   meeting_type: string;
   client_id: number;
   client_code: string;
@@ -49,8 +11,8 @@ export type MeetingMaster = {
   meeting_note1: string;
   status: string;
   is_active: boolean;
-  created_by?: string | null;
-  updated_by?: string | null;
+  created_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -63,8 +25,6 @@ export type MeetingMasterListResponse = {
 };
 
 export type MeetingMasterPayload = {
-  meeting_name: string;
-  meeting_type_id: number;
   meeting_type: string;
   client_id: number;
   client_code: string;
@@ -81,55 +41,70 @@ export type MeetingMasterUpdatePayload = Partial<MeetingMasterPayload> & {
   is_active?: boolean;
 };
 
-export type MeetingMasterListParams = {
-  page?: number;
-  page_size?: number;
-  pageSize?: number;
+type ListParams = {
+  page: number;
+  pageSize: number;
   search?: string;
-  sort_by?: string;
-  sortBy?: string;
-  sort_order?: "asc" | "desc";
-  sortOrder?: "asc" | "desc";
-  is_active?: boolean;
   isActive?: boolean;
 };
 
-function buildQuery(params: MeetingMasterListParams = {}): string {
-  const normalizedParams = {
-    page: params.page,
-    page_size: params.page_size ?? params.pageSize,
-    search: params.search,
-    sort_by: params.sort_by ?? params.sortBy,
-    sort_order: params.sort_order ?? params.sortOrder,
-    is_active: params.is_active ?? params.isActive,
-  };
+function buildQuery(params: ListParams) {
+  const query = new URLSearchParams();
 
-  const searchParams = new URLSearchParams();
+  query.set("page", String(params.page));
+  query.set("page_size", String(params.pageSize));
+  query.set("sort_by", "meeting_id");
+  query.set("sort_order", "desc");
 
-  Object.entries(normalizedParams).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") {
-      return;
-    }
+  if (params.search) {
+    query.set("search", params.search);
+  }
 
-    searchParams.set(key, String(value));
-  });
+  if (typeof params.isActive === "boolean") {
+    query.set("is_active", String(params.isActive));
+  }
 
-  const query = searchParams.toString();
-  return query ? `?${query}` : "";
+  return query.toString();
 }
 
-export async function listMeetingMaster(
-  params: MeetingMasterListParams = {},
-): Promise<MeetingMasterListResponse> {
+async function requestJson<T>(
+  url: string,
+  options?: RequestInit,
+): Promise<T> {
+  const response = await fetch(url, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(options?.headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    const message =
+      error?.detail || error?.message || "Meeting Master request failed.";
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as T;
+}
+
+export async function listMeetingMaster(params: ListParams) {
+  const query = buildQuery(params);
+
   return requestJson<MeetingMasterListResponse>(
-    `/api/backend/meeting-master${buildQuery(params)}`,
+    `/api/backend/meeting-master?${query}`,
+    {
+      method: "GET",
+    },
   );
 }
 
-export async function createMeetingMaster(
-  payload: MeetingMasterPayload,
-): Promise<{ message: string; data: MeetingMaster | null }> {
-  return requestJson<{ message: string; data: MeetingMaster | null }>(
+export async function createMeetingMaster(payload: MeetingMasterPayload) {
+  return requestJson<{ message: string; data: MeetingMaster }>(
     "/api/backend/meeting-master",
     {
       method: "POST",
@@ -139,11 +114,11 @@ export async function createMeetingMaster(
 }
 
 export async function updateMeetingMaster(
-  meetingId: number,
+  id: number,
   payload: MeetingMasterUpdatePayload,
-): Promise<{ message: string; data: MeetingMaster | null }> {
-  return requestJson<{ message: string; data: MeetingMaster | null }>(
-    `/api/backend/meeting-master/${meetingId}`,
+) {
+  return requestJson<{ message: string; data: MeetingMaster }>(
+    `/api/backend/meeting-master/${id}`,
     {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -151,33 +126,27 @@ export async function updateMeetingMaster(
   );
 }
 
-export async function deactivateMeetingMaster(
-  meetingId: number,
-): Promise<{ message: string; data: MeetingMaster | null }> {
-  return requestJson<{ message: string; data: MeetingMaster | null }>(
-    `/api/backend/meeting-master/${meetingId}`,
+export async function deactivateMeetingMaster(id: number) {
+  return requestJson<{ message: string; data: MeetingMaster }>(
+    `/api/backend/meeting-master/${id}`,
     {
       method: "DELETE",
     },
   );
 }
 
-export async function restoreMeetingMaster(
-  meetingId: number,
-): Promise<{ message: string; data: MeetingMaster | null }> {
-  return requestJson<{ message: string; data: MeetingMaster | null }>(
-    `/api/backend/meeting-master/${meetingId}/restore`,
+export async function restoreMeetingMaster(id: number) {
+  return requestJson<{ message: string; data: MeetingMaster }>(
+    `/api/backend/meeting-master/${id}/restore`,
     {
       method: "PATCH",
     },
   );
 }
 
-export async function permanentDeleteMeetingMaster(
-  meetingId: number,
-): Promise<{ message: string; data: MeetingMaster | null }> {
-  return requestJson<{ message: string; data: MeetingMaster | null }>(
-    `/api/backend/meeting-master/${meetingId}/permanent`,
+export async function permanentDeleteMeetingMaster(id: number) {
+  return requestJson<{ message: string; data: null }>(
+    `/api/backend/meeting-master/${id}/permanent`,
     {
       method: "DELETE",
     },
