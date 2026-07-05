@@ -247,7 +247,7 @@ const debouncedSearch = useDebouncedValue(search, 400);
 
   const showTopActions = meetingMasterActions.showTopActions;
   const showRowActions = meetingMasterActions.showRowActions;
-  const tableColumnCount = showRowActions ? 11 : 10;
+  const tableColumnCount = showRowActions ? 12 : 11;
 
   const loadEntityTypes = useCallback(async () => {
     try {
@@ -676,7 +676,7 @@ const openCreateDrawer = () => {
               label: "Search",
               type: "search",
               value: search,
-              placeholder: "Search type, client code, year, venue, status...",
+              placeholder: "Search name, type, client code, year, venue, status...",
               onChange: (value) => {
                 setSearch(value);
                 resetToFirstPage();
@@ -717,6 +717,7 @@ const openCreateDrawer = () => {
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-black uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-4">ID</th>
+                <th className="px-5 py-4">Meeting Name</th>
                 <th className="px-5 py-4">Meeting Type</th>
                 <th className="px-5 py-4">Client</th>
                 <th className="px-5 py-4">Audit Year</th>
@@ -771,12 +772,18 @@ const openCreateDrawer = () => {
                       </td>
                       <td className="px-5 py-4">
                         <div className="text-sm font-black text-slate-800">
-                          {item.meeting_type}
+                          {item.meeting_name}
                         </div>
                         <div className="mt-1 text-xs font-medium text-slate-400">
                           {item.meeting_note1.slice(0, 70)}
                           {item.meeting_note1.length > 70 ? "..." : ""}
                         </div>
+                      </td>
+                      <td
+                        className="px-5 py-4 text-sm font-bold text-slate-700"
+                        data-meeting-type-column
+                      >
+                        {item.meeting_type}
                       </td>
                       <td className="px-5 py-4">
                         <div className="text-sm font-bold text-slate-700">
