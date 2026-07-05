@@ -37,7 +37,6 @@ async def list_meeting_type(
         page_size=page_size,
         search=search,
         is_active=is_active,
-        status_filter=status_filter,
         sort_by=sort_by,
         sort_order=sort_order,
     )
