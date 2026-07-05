@@ -31,6 +31,7 @@ from app.api.v1.employees import router as employees_router
 from app.api.v1.health import router as health_router
 from app.api.v1.legal_statuses import router as legal_statuses_router
 from app.api.v1.me import router as me_router
+from app.api.v1.meeting_type import router as meeting_type_router
 from app.api.v1.meeting_master import router as meeting_master_router
 from app.api.v1.meeting_participants import router as meeting_participants_router
 from app.api.v1.meeting_reports import router as meeting_reports_router
@@ -76,6 +77,7 @@ api_router.include_router(employees_router)
 api_router.include_router(health_router)
 api_router.include_router(legal_statuses_router)
 api_router.include_router(me_router)
+api_router.include_router(meeting_type_router)
 api_router.include_router(meeting_master_router)
 api_router.include_router(meeting_participants_router)
 api_router.include_router(meeting_reports_router)

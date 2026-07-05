@@ -102,3 +102,5 @@ __all__ = [
     "User",
     "UserRole",
 ]
+
+from app.models.meeting_type import MeetingType
