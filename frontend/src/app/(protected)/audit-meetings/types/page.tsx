@@ -339,14 +339,18 @@ export default function MeetingTypePage() {
     try {
       if (confirmAction === "inactive") {
         await deactivateMeetingType(confirmItem.meeting_type_id);
+        setStatusFilter("inactive");
+        setPage(1);
         setMessage({
           type: "success",
-          text: "Meeting Type marked inactive successfully.",
+          text: "Meeting Type marked inactive successfully. You are now viewing inactive records for restore or permanent delete.",
         });
       }
 
       if (confirmAction === "restore") {
         await restoreMeetingType(confirmItem.meeting_type_id);
+        setStatusFilter("active");
+        setPage(1);
         setMessage({
           type: "success",
           text: "Meeting Type restored successfully.",
@@ -558,7 +562,7 @@ export default function MeetingTypePage() {
                               <button
                                 onClick={() => openConfirm(item, "inactive")}
                                 className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
-                                title="Inactive"
+                                title="Mark as Inactive"
                               >
                                 <Trash2 size={16} />
                               </button>
@@ -772,3 +776,4 @@ export default function MeetingTypePage() {
     </main>
   );
 }
+
