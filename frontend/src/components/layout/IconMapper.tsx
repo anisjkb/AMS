@@ -50,9 +50,13 @@ import {
   UserRoundCog,
   Users,
   UsersRound,
+  Tag,
+  CalendarCheck,
 } from "lucide-react";
 
 export const iconMap = {
+  Tags: Tag,
+  CalendarCheck: CalendarCheck,
   AlertTriangle,
   BarChart3,
   BookOpenCheck,
