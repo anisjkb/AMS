@@ -1,6 +1,6 @@
 export type MeetingParticipant = {
   participant_id: number;
-  report_id: number;
+  meeting_id: number;
   name: string;
   designation: string | null;
   signature: string | null;
@@ -19,7 +19,7 @@ export type MeetingParticipantListResponse = {
 };
 
 export type MeetingParticipantPayload = {
-  report_id: number;
+  meeting_id: number;
   name: string;
   designation?: string | null;
   signature?: string | null;
@@ -54,7 +54,7 @@ function buildQuery(params: ListParams) {
   }
 
   if (params.reportId) {
-    query.set("report_id", String(params.reportId));
+    query.set("meeting_id", String(params.reportId));
   }
 
   return query.toString();

@@ -23,7 +23,7 @@ import {
 } from "@/components/crud/crudConstants";
 import CrudSelectField from "@/components/crud/fields/CrudSelectField";
 import CrudTextField from "@/components/crud/fields/CrudTextField";
-import { listMeetingReports, type MeetingReport } from "@/services/meetingReport";
+import { listMeetingMaster, type MeetingMaster } from "@/services/meetingMaster";
 import {
   createMeetingParticipant,
   deactivateMeetingParticipant,
@@ -45,14 +45,14 @@ type PageMessage = {
 };
 
 type FormState = {
-  report_id: string;
+  meeting_id: string;
   name: string;
   designation: string;
   signature: string;
 };
 
 const emptyForm: FormState = {
-  report_id: "",
+  meeting_id: "",
   name: "",
   designation: "",
   signature: "",
@@ -81,7 +81,7 @@ function toTitle(value: string | null | undefined) {
 
 function buildFormFromItem(item: MeetingParticipant): FormState {
   return {
-    report_id: String(item.report_id),
+    meeting_id: String(item.meeting_id),
     name: item.name,
     designation: item.designation ?? "",
     signature: item.signature ?? "",
@@ -90,15 +90,15 @@ function buildFormFromItem(item: MeetingParticipant): FormState {
 
 function buildPayload(form: FormState): MeetingParticipantPayload {
   return {
-    report_id: Number.parseInt(form.report_id, 10),
+    meeting_id: Number.parseInt(form.meeting_id, 10),
     name: form.name.trim(),
     designation: form.designation.trim() || null,
     signature: form.signature.trim() || null,
   };
 }
 
-function buildReportLabel(report: MeetingReport) {
-  return `#${report.report_id} — ${report.meeting_type} — ${report.client_name} — ${report.audit_year}`;
+function buildReportLabel(report: MeetingMaster) {
+  return `${report.meeting_name} — ${report.client_code} — ${report.audit_year}`;
 }
 
 export default function MeetingParticipantsPage() {
@@ -113,7 +113,7 @@ export default function MeetingParticipantsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const [reportOptions, setReportOptions] = useState<MeetingReport[]>([]);
+  const [reportOptions, setReportOptions] = useState<MeetingMaster[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -153,17 +153,17 @@ export default function MeetingParticipantsPage() {
   }, [statusFilter]);
 
   const reportMap = useMemo(() => {
-    return new Map(reportOptions.map((report) => [report.report_id, report]));
+    return new Map(reportOptions.map((report) => [report.meeting_id, report]));
   }, [reportOptions]);
 
   const selectedReport = useMemo(() => {
-    if (!form.report_id) return null;
+    if (!form.meeting_id) return null;
 
     return (
-      reportOptions.find((report) => String(report.report_id) === form.report_id) ??
+      reportOptions.find((report) => String(report.meeting_id) === form.meeting_id) ??
       null
     );
-  }, [form.report_id, reportOptions]);
+  }, [form.meeting_id, reportOptions]);
 
   const showTopActions = participantActions.showTopActions;
   const showRowActions = participantActions.showRowActions;
@@ -201,7 +201,7 @@ export default function MeetingParticipantsPage() {
     setReportLoading(true);
 
     try {
-      const response = await listMeetingReports({
+      const response = await listMeetingMaster({
         page: 1,
         pageSize: 100,
         isActive: true,
@@ -276,8 +276,8 @@ export default function MeetingParticipantsPage() {
   };
 
   const validateForm = () => {
-    if (!form.report_id.trim()) {
-      setMessage({ type: "error", text: "Meeting Report is required." });
+    if (!form.meeting_id.trim()) {
+      setMessage({ type: "error", text: "Meeting Master is required." });
       return false;
     }
 
@@ -286,11 +286,11 @@ export default function MeetingParticipantsPage() {
       return false;
     }
 
-    const reportId = Number.parseInt(form.report_id, 10);
+    const reportId = Number.parseInt(form.meeting_id, 10);
     if (Number.isNaN(reportId) || reportId <= 0) {
       setMessage({
         type: "error",
-        text: "Meeting Report must be a valid selection.",
+        text: "Meeting Master must be a valid selection.",
       });
       return false;
     }
@@ -394,7 +394,7 @@ export default function MeetingParticipantsPage() {
               </p>
               <h1 className="mt-2 text-3xl font-black">Meeting Participants</h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-slate-300">
-                Maintain meeting participants under generated Meeting Reports.
+                Maintain meeting participants under Meeting Master.
               </p>
             </div>
 
@@ -519,7 +519,7 @@ export default function MeetingParticipantsPage() {
                         No Meeting Participant records found
                       </p>
                       <p className="mt-1 text-sm text-slate-400">
-                        Add participants under an existing Meeting Report.
+                        Add participants under an existing Meeting Master.
                       </p>
                     </div>
                   </td>
@@ -528,7 +528,7 @@ export default function MeetingParticipantsPage() {
 
               {!isLoading
                 ? items.map((item) => {
-                    const report = reportMap.get(item.report_id);
+                    const report = reportMap.get(item.meeting_id);
 
                     return (
                       <tr key={item.participant_id} className="hover:bg-slate-50">
@@ -537,11 +537,11 @@ export default function MeetingParticipantsPage() {
                         </td>
                         <td className="px-5 py-4">
                           <div className="text-sm font-black text-slate-800">
-                            Report #{item.report_id}
+                            Meeting Master #{item.meeting_id}
                           </div>
                           {report ? (
                             <div className="mt-1 text-xs text-slate-400">
-                              {report.meeting_type} — {report.client_name}
+                              {report.meeting_name} — {report.client_code}
                             </div>
                           ) : null}
                         </td>
@@ -664,38 +664,38 @@ export default function MeetingParticipantsPage() {
           className="space-y-5"
         >
           <CrudSelectField
-            label="Meeting Report"
-            value={form.report_id}
+            label="Meeting Master"
+            value={form.meeting_id}
             options={[
               {
                 value: "",
                 label: reportLoading
-                  ? "Loading Meeting Reports..."
-                  : "Select Meeting Report",
+                  ? "Loading Meeting Master..."
+                  : "Select Meeting Master",
               },
               ...reportOptions.map((report) => ({
-                value: String(report.report_id),
+                value: String(report.meeting_id),
                 label: buildReportLabel(report),
               })),
             ]}
             onChange={(value) =>
-              setForm((current) => ({ ...current, report_id: value }))
+              setForm((current) => ({ ...current, meeting_id: value }))
             }
           />
 
           {selectedReport ? (
             <div className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 md:grid-cols-2">
               <div>
-                <span className="font-black">Report:</span> #
-                {selectedReport.report_id}
+                <span className="font-black">Meeting Master:</span> #
+                {selectedReport.meeting_id}
               </div>
               <div>
-                <span className="font-black">Meeting:</span>{" "}
-                {selectedReport.meeting_type}
+                <span className="font-black">Meeting Name:</span>{" "}
+                {selectedReport.meeting_name}
               </div>
               <div>
-                <span className="font-black">Client:</span>{" "}
-                {selectedReport.client_name}
+                <span className="font-black">Client Code:</span>{" "}
+                {selectedReport.client_code}
               </div>
               <div>
                 <span className="font-black">Meeting Date:</span>{" "}
@@ -790,3 +790,4 @@ export default function MeetingParticipantsPage() {
     </div>
   );
 }
+

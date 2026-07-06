@@ -20,7 +20,7 @@ class MeetingParticipantService:
         page_size: int,
         search: str | None,
         is_active: bool | None,
-        report_id: int | None,
+        meeting_id: int | None,
         sort_by: str,
         sort_order: str,
     ):
@@ -29,7 +29,7 @@ class MeetingParticipantService:
             page_size=page_size,
             search=search,
             is_active=is_active,
-            report_id=report_id,
+            meeting_id=meeting_id,
             sort_by=sort_by,
             sort_order=sort_order,
         )
@@ -52,13 +52,13 @@ class MeetingParticipantService:
 
         return item
 
-    async def _validate_report(self, report_id: int) -> None:
-        report = await self.repository.get_active_report_by_id(report_id)
+    async def _validate_report(self, meeting_id: int) -> None:
+        report = await self.repository.get_active_report_by_id(meeting_id)
 
         if not report:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Selected Meeting Report is invalid or inactive.",
+                detail="Selected Meeting Master is invalid or inactive.",
             )
 
     async def create_meeting_participant(
@@ -66,7 +66,7 @@ class MeetingParticipantService:
         payload: MeetingParticipantCreate,
         created_by: str,
     ):
-        await self._validate_report(payload.report_id)
+        await self._validate_report(payload.meeting_id)
 
         item = await self.repository.create(
             payload=payload,
@@ -93,8 +93,8 @@ class MeetingParticipantService:
                 detail="No update data provided.",
             )
 
-        if "report_id" in update_data:
-            await self._validate_report(update_data["report_id"])
+        if "meeting_id" in update_data:
+            await self._validate_report(update_data["meeting_id"])
 
         updated_item = await self.repository.update(
             item=item,

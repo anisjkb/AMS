@@ -25,7 +25,7 @@ async def list_meeting_participants(
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = None,
     is_active: bool | None = None,
-    report_id: int | None = None,
+    meeting_id: int | None = None,
     sort_by: str = "participant_id",
     sort_order: str = "asc",
     db: AsyncSession = Depends(get_db),
@@ -38,7 +38,7 @@ async def list_meeting_participants(
         page_size=page_size,
         search=search,
         is_active=is_active,
-        report_id=report_id,
+        meeting_id=meeting_id,
         sort_by=sort_by,
         sort_order=sort_order,
     )

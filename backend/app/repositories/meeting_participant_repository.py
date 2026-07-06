@@ -2,7 +2,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.meeting_participant import MeetingParticipant
-from app.models.meeting_report import MeetingReport
+from app.models.meeting_master import MeetingMaster
 from app.schemas.meeting_participant import MeetingParticipantCreate
 
 
@@ -14,7 +14,7 @@ class MeetingParticipantRepository:
         self,
         search: str | None,
         is_active: bool | None,
-        report_id: int | None,
+        meeting_id: int | None,
     ):
         filters = []
 
@@ -31,15 +31,15 @@ class MeetingParticipantRepository:
         if isinstance(is_active, bool):
             filters.append(MeetingParticipant.is_active == is_active)
 
-        if report_id is not None:
-            filters.append(MeetingParticipant.report_id == report_id)
+        if meeting_id is not None:
+            filters.append(MeetingParticipant.meeting_id == meeting_id)
 
         return filters
 
     def _sort_column(self, sort_by: str):
         allowed_sort_columns = {
             "participant_id": MeetingParticipant.participant_id,
-            "report_id": MeetingParticipant.report_id,
+            "meeting_id": MeetingParticipant.meeting_id,
             "name": MeetingParticipant.name,
             "designation": MeetingParticipant.designation,
             "created_at": MeetingParticipant.created_at,
@@ -54,14 +54,14 @@ class MeetingParticipantRepository:
         page_size: int,
         search: str | None,
         is_active: bool | None,
-        report_id: int | None,
+        meeting_id: int | None,
         sort_by: str,
         sort_order: str,
     ) -> tuple[list[MeetingParticipant], int]:
         filters = self._build_filters(
             search=search,
             is_active=is_active,
-            report_id=report_id,
+            meeting_id=meeting_id,
         )
 
         where_clause = and_(*filters) if filters else None
@@ -99,11 +99,11 @@ class MeetingParticipantRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_active_report_by_id(self, report_id: int) -> MeetingReport | None:
+    async def get_active_report_by_id(self, meeting_id: int) -> MeetingMaster | None:
         result = await self.db.execute(
-            select(MeetingReport).where(
-                MeetingReport.report_id == report_id,
-                MeetingReport.is_active.is_(True),
+            select(MeetingMaster).where(
+                MeetingMaster.meeting_id == meeting_id,
+                MeetingMaster.is_active.is_(True),
             )
         )
         return result.scalar_one_or_none()

@@ -18,6 +18,13 @@ class MeetingParticipant(ActiveStatusMixin, AuditMixin, Base):
         Integer,
         ForeignKey("meeting_reports.report_id", ondelete="RESTRICT"),
         index=True,
+        nullable=True,
+    )
+
+    meeting_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("meeting_master.meeting_id"),
+        index=True,
         nullable=False,
     )
 

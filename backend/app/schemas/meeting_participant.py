@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MeetingParticipantBase(BaseModel):
-    report_id: int = Field(..., gt=0)
+    meeting_id: int = Field(..., gt=0)
     name: str = Field(..., min_length=2, max_length=150)
     designation: str | None = Field(default=None, max_length=150)
     signature: str | None = Field(default=None, max_length=255)
@@ -32,7 +32,7 @@ class MeetingParticipantCreate(MeetingParticipantBase):
 
 
 class MeetingParticipantUpdate(BaseModel):
-    report_id: int | None = Field(default=None, gt=0)
+    meeting_id: int | None = Field(default=None, gt=0)
     name: str | None = Field(default=None, min_length=2, max_length=150)
     designation: str | None = Field(default=None, max_length=150)
     signature: str | None = Field(default=None, max_length=255)
@@ -55,7 +55,7 @@ class MeetingParticipantResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     participant_id: int
-    report_id: int
+    meeting_id: int
     name: str
     designation: str | None = None
     signature: str | None = None
