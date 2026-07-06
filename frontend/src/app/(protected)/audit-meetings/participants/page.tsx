@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   Loader2,
@@ -54,6 +54,31 @@ type FormState = {
   entity_contact_id: string;
 };
 
+type AuditEntityOption = {
+  id: number;
+  entity_name: string;
+  entity_code: string;
+};
+
+async function listAuditEntityOptions() {
+  const response = await fetch(
+    "/api/backend/audit-entities?page=1&page_size=100&sort_by=id&sort_order=desc&is_active=true",
+    {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to load audit entities.");
+  }
+
+  return (await response.json()) as { items: AuditEntityOption[] };
+}
+
 const emptyForm: FormState = {
   meeting_type_id: "",
   meeting_id: "",
@@ -81,6 +106,14 @@ function toTitle(value: string | null | undefined) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getConfirmActionLabel(action: ConfirmAction) {
+  if (action === "delete") return "Inactive";
+  if (action === "restore") return "Restore";
+  if (action === "permanent_delete") return "Permanent Delete";
+
+  return toTitle(action);
 }
 
 function buildMeetingLabel(meeting: MeetingMaster) {
@@ -124,6 +157,7 @@ export default function MeetingParticipantsPage() {
   const [entityContactOptions, setEntityContactOptions] = useState<
     EntityContactOption[]
   >([]);
+  const [entityOptions, setEntityOptions] = useState<AuditEntityOption[]>([]);
 
   const [optionLoading, setOptionLoading] = useState(false);
   const [contactLoading, setContactLoading] = useState(false);
@@ -132,6 +166,8 @@ export default function MeetingParticipantsPage() {
   const [message, setMessage] = useState<PageMessage | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [submitMode, setSubmitMode] = useState<"close" | "add_another">("close");
+  const participantSourceFieldRef = useRef<HTMLDivElement>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const [confirmItem, setConfirmItem] = useState<MeetingParticipant | null>(null);
@@ -177,6 +213,16 @@ export default function MeetingParticipantsPage() {
     );
   }, [form.meeting_id, meetingOptions]);
 
+  const entityMap = useMemo(() => {
+    return new Map(entityOptions.map((entity) => [entity.id, entity]));
+  }, [entityOptions]);
+
+  const selectedMeetingClientName = useMemo(() => {
+    if (!selectedMeeting?.client_id) return null;
+
+    return entityMap.get(selectedMeeting.client_id)?.entity_name ?? null;
+  }, [entityMap, selectedMeeting]);
+
   const showTopActions = participantActions.showTopActions;
   const showRowActions = participantActions.showRowActions;
   const tableColumnCount = showRowActions ? 9 : 8;
@@ -213,28 +259,32 @@ export default function MeetingParticipantsPage() {
     setOptionLoading(true);
 
     try {
-      const [typeResponse, meetingResponse, teamResponse] = await Promise.all([
-        listMeetingTypes({
-          page_size: 100,
-          is_active: true,
-          sort_by: "meeting_type_name",
-          sort_order: "asc",
-        }),
-        listMeetingMaster({
-          page: 1,
-          pageSize: 100,
-          isActive: true,
-        }),
-        listMeetingParticipantInternalTeams(),
-      ]);
+      const [typeResponse, meetingResponse, teamResponse, entityResponse] =
+        await Promise.all([
+          listMeetingTypes({
+            page_size: 100,
+            is_active: true,
+            sort_by: "meeting_type_name",
+            sort_order: "asc",
+          }),
+          listMeetingMaster({
+            page: 1,
+            pageSize: 100,
+            isActive: true,
+          }),
+          listMeetingParticipantInternalTeams(),
+          listAuditEntityOptions(),
+        ]);
 
       setMeetingTypes(typeResponse.items);
       setMeetingOptions(meetingResponse.items);
       setInternalTeamOptions(teamResponse.items);
+      setEntityOptions(entityResponse.items);
     } catch {
       setMeetingTypes([]);
       setMeetingOptions([]);
       setInternalTeamOptions([]);
+      setEntityOptions([]);
     } finally {
       setOptionLoading(false);
     }
@@ -286,6 +336,7 @@ export default function MeetingParticipantsPage() {
   };
 
   const openCreateDrawer = () => {
+    setSubmitMode("close");
     setForm(emptyForm);
     setDrawerOpen(true);
     void loadOptions();
@@ -295,6 +346,7 @@ export default function MeetingParticipantsPage() {
     if (submitLoading) return;
 
     setDrawerOpen(false);
+    setSubmitMode("close");
     setForm(emptyForm);
     setEntityContactOptions([]);
   };
@@ -310,6 +362,17 @@ export default function MeetingParticipantsPage() {
     setConfirmItem(null);
     setConfirmAction(null);
   };
+
+  const focusParticipantSource = useCallback(() => {
+    window.setTimeout(() => {
+      const field = participantSourceFieldRef.current;
+      const target = field?.querySelector(
+        "select, button, input, [tabindex]:not([tabindex='-1'])",
+      ) as HTMLElement | null;
+
+      target?.focus();
+    }, 120);
+  }, []);
 
   const validateForm = () => {
     if (!form.meeting_type_id.trim()) {
@@ -357,20 +420,33 @@ export default function MeetingParticipantsPage() {
     try {
       const response = await createMeetingParticipant(buildPayload(form));
 
-      setDrawerOpen(false);
-      setForm(emptyForm);
-      setEntityContactOptions([]);
-
       await loadParticipants();
 
       const addedCount = Array.isArray(response.data) ? response.data.length : 0;
-      setMessage({
-        type: "success",
-        text:
-          addedCount > 1
-            ? `${addedCount} Meeting Participants added successfully.`
-            : response.message,
-      });
+      const successMessage =
+        addedCount > 1
+          ? `${addedCount} Meeting Participants added successfully.`
+          : response.message;
+
+      if (submitMode === "add_another") {
+        setForm((current) => ({
+          ...current,
+          source_type: "",
+          audit_team_id: "",
+          entity_contact_id: "",
+        }));
+
+        setMessage({ type: "success", text: successMessage });
+        focusParticipantSource();
+        return;
+      }
+
+      setDrawerOpen(false);
+      setSubmitMode("close");
+      setForm(emptyForm);
+      setEntityContactOptions([]);
+
+      setMessage({ type: "success", text: successMessage });
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -581,7 +657,8 @@ export default function MeetingParticipantsPage() {
                           {item.meeting_name || `Meeting #${item.meeting_id}`}
                         </div>
                         <div className="mt-1 text-xs text-slate-400">
-                          {item.client_code || "-"}
+                          {entityMap.get(item.client_id ?? 0)?.entity_name || "-"}{" "}
+                          <span>({item.client_code || "-"})</span>
                         </div>
                       </td>
                       <td className="px-5 py-4 text-sm font-bold text-slate-600">
@@ -682,14 +759,30 @@ export default function MeetingParticipantsPage() {
               type="submit"
               form="meeting-participant-form"
               disabled={submitLoading}
+              onClick={() => setSubmitMode("close")}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitLoading ? (
+              {submitLoading && submitMode === "close" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Users className="h-4 w-4" />
               )}
-              Create
+              Save & Close
+            </button>
+
+            <button
+              type="submit"
+              form="meeting-participant-form"
+              disabled={submitLoading}
+              onClick={() => setSubmitMode("add_another")}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submitLoading && submitMode === "add_another" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Save & Add Another
             </button>
           </>
         }
@@ -760,6 +853,10 @@ export default function MeetingParticipantsPage() {
                 {selectedMeeting.meeting_type}
               </div>
               <div>
+                <span className="font-black">Client Name:</span>{" "}
+                {selectedMeetingClientName || "-"}
+              </div>
+              <div>
                 <span className="font-black">Client Code:</span>{" "}
                 {selectedMeeting.client_code}
               </div>
@@ -770,23 +867,25 @@ export default function MeetingParticipantsPage() {
             </div>
           ) : null}
 
-          <CrudSelectField
-            label="Participant Source"
-            value={form.source_type}
-            options={[
-              { value: "", label: "Select Participant Source" },
-              { value: "internal_audit_team", label: "From Internal Audit Team" },
-              { value: "client_entity_team", label: "From Client/Entity Team" },
-            ]}
-            onChange={(value) => {
-              setForm((current) => ({
-                ...current,
-                source_type: value as MeetingParticipantSourceType | "",
-                audit_team_id: "",
-                entity_contact_id: "",
-              }));
-            }}
-          />
+          <div ref={participantSourceFieldRef}>
+            <CrudSelectField
+              label="Participant Source"
+              value={form.source_type}
+              options={[
+                { value: "", label: "Select Participant Source" },
+                { value: "internal_audit_team", label: "From Internal Audit Team" },
+                { value: "client_entity_team", label: "From Client/Entity Team" },
+              ]}
+              onChange={(value) => {
+                setForm((current) => ({
+                  ...current,
+                  source_type: value as MeetingParticipantSourceType | "",
+                  audit_team_id: "",
+                  entity_contact_id: "",
+                }));
+              }}
+            />
+          </div>
 
           {form.source_type === "internal_audit_team" ? (
             <CrudSelectField
@@ -832,8 +931,14 @@ export default function MeetingParticipantsPage() {
             />
           ) : null}
 
-          {message && drawerOpen && message.type === "error" ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+          {message && drawerOpen ? (
+            <div
+              className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                message.type === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              }`}
+            >
               {message.text}
             </div>
           ) : null}
@@ -854,7 +959,7 @@ export default function MeetingParticipantsPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   Are you sure you want to{" "}
                   <span className="font-black text-slate-700">
-                    {toTitle(confirmAction)}
+                    {getConfirmActionLabel(confirmAction)}
                   </span>{" "}
                   this Meeting Participant record?
                 </p>
@@ -888,3 +993,6 @@ export default function MeetingParticipantsPage() {
     </div>
   );
 }
+
+
+
