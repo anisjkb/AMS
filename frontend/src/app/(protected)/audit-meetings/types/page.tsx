@@ -120,7 +120,7 @@ function buildPayload(form: FormState): MeetingTypePayload {
 export default function MeetingTypePage() {
   // Temporary: backend currently reuses Meeting Master permissions for Meeting Type.
   // When Meeting Type gets its own menu permission, change this to "meeting_type".
-  const meetingTypeActions = useModuleActions("meeting_master");
+  const meetingTypeActions = useModuleActions("meeting_type");
 
   const [items, setItems] = useState<MeetingType[]>([]);
   const [page, setPage] = useState(1);
@@ -776,4 +776,5 @@ export default function MeetingTypePage() {
     </main>
   );
 }
+
 

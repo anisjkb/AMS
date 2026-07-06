@@ -28,7 +28,7 @@ async def list_meeting_type(
     sort_by: str = "meeting_type_id",
     sort_order: str = "asc",
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("menu.meeting_master.view")),
+    current_user: User = Depends(require_permission("menu.meeting_type.view")),
 ):
     service = MeetingTypeService(db)
 
@@ -46,7 +46,7 @@ async def list_meeting_type(
 async def get_meeting_type(
     meeting_type_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("menu.meeting_master.view")),
+    current_user: User = Depends(require_permission("menu.meeting_type.view")),
 ):
     service = MeetingTypeService(db)
     return await service.get_meeting_type(meeting_type_id)
@@ -60,13 +60,13 @@ async def get_meeting_type(
 async def create_meeting_type(
     payload: MeetingTypeCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.meeting_master.create")),
+    current_user: User = Depends(require_permission("api.meeting_type.create")),
 ):
     service = MeetingTypeService(db)
 
     return await service.create_meeting_type(
         payload=payload,
-        created_by=current_user.user_id,
+        username=str(current_user.user_id),
     )
 
 
@@ -75,14 +75,14 @@ async def update_meeting_type(
     meeting_type_id: int,
     payload: MeetingTypeUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.meeting_master.update")),
+    current_user: User = Depends(require_permission("api.meeting_type.update")),
 ):
     service = MeetingTypeService(db)
 
     return await service.update_meeting_type(
         meeting_type_id=meeting_type_id,
         payload=payload,
-        updated_by=current_user.user_id,
+        username=str(current_user.user_id),
     )
 
 
@@ -90,13 +90,13 @@ async def update_meeting_type(
 async def delete_meeting_type(
     meeting_type_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.meeting_master.delete")),
+    current_user: User = Depends(require_permission("api.meeting_type.delete")),
 ):
     service = MeetingTypeService(db)
 
     return await service.deactivate_meeting_type(
         meeting_type_id=meeting_type_id,
-        updated_by=current_user.user_id,
+        username=str(current_user.user_id),
     )
 
 
@@ -104,13 +104,13 @@ async def delete_meeting_type(
 async def restore_meeting_type(
     meeting_type_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.meeting_master.restore")),
+    current_user: User = Depends(require_permission("api.meeting_type.restore")),
 ):
     service = MeetingTypeService(db)
 
     return await service.restore_meeting_type(
         meeting_type_id=meeting_type_id,
-        updated_by=current_user.user_id,
+        username=str(current_user.user_id),
     )
 
 
@@ -122,10 +122,12 @@ async def permanent_delete_meeting_type(
     meeting_type_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(
-        require_permission("api.meeting_master.permanent_delete")
+        require_permission("api.meeting_type.permanent_delete")
     ),
 ):
     service = MeetingTypeService(db)
     return await service.permanent_delete_meeting_type(meeting_type_id)
+
+
 
 
