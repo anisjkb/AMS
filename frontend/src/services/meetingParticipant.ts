@@ -1,9 +1,23 @@
+export type MeetingParticipantSourceType =
+  | "internal_audit_team"
+  | "client_entity_team";
+
 export type MeetingParticipant = {
   participant_id: number;
   meeting_id: number;
-  name: string;
+  meeting_name: string | null;
+  meeting_type_id: number | null;
+  meeting_type: string | null;
+  client_id: number | null;
+  client_code: string | null;
+  source_type: MeetingParticipantSourceType;
+  source_label: string | null;
+  audit_team_id: number | null;
+  audit_team_name: string | null;
+  audit_team_member_id: number | null;
+  entity_contact_id: number | null;
+  participant_name: string | null;
   designation: string | null;
-  signature: string | null;
   is_active: boolean;
   created_by: string | null;
   updated_by: string | null;
@@ -20,13 +34,25 @@ export type MeetingParticipantListResponse = {
 
 export type MeetingParticipantPayload = {
   meeting_id: number;
-  name: string;
-  designation?: string | null;
-  signature?: string | null;
+  source_type: MeetingParticipantSourceType;
+  audit_team_id?: number | null;
+  entity_contact_id?: number | null;
 };
 
-export type MeetingParticipantUpdatePayload = Partial<MeetingParticipantPayload> & {
-  is_active?: boolean;
+export type InternalTeamOption = {
+  team_id: number;
+  team_name: string;
+  member_count: number;
+};
+
+export type EntityContactOption = {
+  id: number;
+  audit_entity_id: number;
+  contact_name: string;
+  designation: string | null;
+  department: string | null;
+  email: string | null;
+  mobile: string | null;
 };
 
 type ListParams = {
@@ -34,7 +60,6 @@ type ListParams = {
   pageSize: number;
   search?: string;
   isActive?: boolean;
-  reportId?: number;
 };
 
 function buildQuery(params: ListParams) {
@@ -51,10 +76,6 @@ function buildQuery(params: ListParams) {
 
   if (typeof params.isActive === "boolean") {
     query.set("is_active", String(params.isActive));
-  }
-
-  if (params.reportId) {
-    query.set("meeting_id", String(params.reportId));
   }
 
   return query.toString();
@@ -96,24 +117,29 @@ export async function listMeetingParticipants(params: ListParams) {
   );
 }
 
-export async function createMeetingParticipant(payload: MeetingParticipantPayload) {
-  return requestJson<{ message: string; data: MeetingParticipant }>(
-    "/api/backend/meeting-participants",
+export async function listMeetingParticipantInternalTeams() {
+  return requestJson<{ items: InternalTeamOption[] }>(
+    "/api/backend/meeting-participants/options/internal-teams",
     {
-      method: "POST",
-      body: JSON.stringify(payload),
+      method: "GET",
     },
   );
 }
 
-export async function updateMeetingParticipant(
-  id: number,
-  payload: MeetingParticipantUpdatePayload,
-) {
-  return requestJson<{ message: string; data: MeetingParticipant }>(
-    `/api/backend/meeting-participants/${id}`,
+export async function listMeetingParticipantEntityContacts(meetingId: number) {
+  return requestJson<{ items: EntityContactOption[] }>(
+    `/api/backend/meeting-participants/options/entity-contacts?meeting_id=${meetingId}`,
     {
-      method: "PATCH",
+      method: "GET",
+    },
+  );
+}
+
+export async function createMeetingParticipant(payload: MeetingParticipantPayload) {
+  return requestJson<{ message: string; data: MeetingParticipant[] }>(
+    "/api/backend/meeting-participants",
+    {
+      method: "POST",
       body: JSON.stringify(payload),
     },
   );

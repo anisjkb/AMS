@@ -4,15 +4,12 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import {
   AlertTriangle,
   Loader2,
-  Pencil,
   Plus,
   RotateCcw,
   Trash2,
   Users,
 } from "lucide-react";
 
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useModuleActions } from "@/hooks/useModuleActions";
 import CrudDrawer from "@/components/crud/CrudDrawer";
 import CrudPagination from "@/components/crud/CrudPagination";
 import { CrudPillBadge, CrudStatusBadge } from "@/components/crud/CrudStatusBadge";
@@ -22,21 +19,26 @@ import {
   type CrudPageSizeOption,
 } from "@/components/crud/crudConstants";
 import CrudSelectField from "@/components/crud/fields/CrudSelectField";
-import CrudTextField from "@/components/crud/fields/CrudTextField";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useModuleActions } from "@/hooks/useModuleActions";
 import { listMeetingMaster, type MeetingMaster } from "@/services/meetingMaster";
 import {
   createMeetingParticipant,
   deactivateMeetingParticipant,
+  listMeetingParticipantEntityContacts,
+  listMeetingParticipantInternalTeams,
   listMeetingParticipants,
   permanentDeleteMeetingParticipant,
   restoreMeetingParticipant,
-  updateMeetingParticipant,
+  type EntityContactOption,
+  type InternalTeamOption,
   type MeetingParticipant,
   type MeetingParticipantPayload,
+  type MeetingParticipantSourceType,
 } from "@/services/meetingParticipant";
+import { listMeetingTypes, type MeetingType } from "@/services/meetingType";
 
 type StatusFilter = "all" | "active" | "inactive";
-type DrawerMode = "create" | "edit";
 type ConfirmAction = "delete" | "restore" | "permanent_delete";
 
 type PageMessage = {
@@ -45,17 +47,19 @@ type PageMessage = {
 };
 
 type FormState = {
+  meeting_type_id: string;
   meeting_id: string;
-  name: string;
-  designation: string;
-  signature: string;
+  source_type: MeetingParticipantSourceType | "";
+  audit_team_id: string;
+  entity_contact_id: string;
 };
 
 const emptyForm: FormState = {
+  meeting_type_id: "",
   meeting_id: "",
-  name: "",
-  designation: "",
-  signature: "",
+  source_type: "",
+  audit_team_id: "",
+  entity_contact_id: "",
 };
 
 function formatDate(value: string | null | undefined) {
@@ -79,26 +83,25 @@ function toTitle(value: string | null | undefined) {
     .join(" ");
 }
 
-function buildFormFromItem(item: MeetingParticipant): FormState {
-  return {
-    meeting_id: String(item.meeting_id),
-    name: item.name,
-    designation: item.designation ?? "",
-    signature: item.signature ?? "",
-  };
+function buildMeetingLabel(meeting: MeetingMaster) {
+  return `${meeting.meeting_name} (${meeting.client_code} - ${meeting.audit_year})`;
 }
 
 function buildPayload(form: FormState): MeetingParticipantPayload {
+  const sourceType = form.source_type as MeetingParticipantSourceType;
+
   return {
     meeting_id: Number.parseInt(form.meeting_id, 10),
-    name: form.name.trim(),
-    designation: form.designation.trim() || null,
-    signature: form.signature.trim() || null,
+    source_type: sourceType,
+    audit_team_id:
+      sourceType === "internal_audit_team"
+        ? Number.parseInt(form.audit_team_id, 10)
+        : null,
+    entity_contact_id:
+      sourceType === "client_entity_team"
+        ? Number.parseInt(form.entity_contact_id, 10)
+        : null,
   };
-}
-
-function buildReportLabel(report: MeetingMaster) {
-  return `${report.meeting_name} — ${report.client_code} — ${report.audit_year}`;
 }
 
 export default function MeetingParticipantsPage() {
@@ -113,18 +116,22 @@ export default function MeetingParticipantsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const [reportOptions, setReportOptions] = useState<MeetingMaster[]>([]);
-  const [reportLoading, setReportLoading] = useState(false);
+  const [meetingTypes, setMeetingTypes] = useState<MeetingType[]>([]);
+  const [meetingOptions, setMeetingOptions] = useState<MeetingMaster[]>([]);
+  const [internalTeamOptions, setInternalTeamOptions] = useState<
+    InternalTeamOption[]
+  >([]);
+  const [entityContactOptions, setEntityContactOptions] = useState<
+    EntityContactOption[]
+  >([]);
 
+  const [optionLoading, setOptionLoading] = useState(false);
+  const [contactLoading, setContactLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [message, setMessage] = useState<PageMessage | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<DrawerMode>("create");
-  const [selectedItem, setSelectedItem] = useState<MeetingParticipant | null>(
-    null,
-  );
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const [confirmItem, setConfirmItem] = useState<MeetingParticipant | null>(null);
@@ -152,22 +159,27 @@ export default function MeetingParticipantsPage() {
     return statusFilter === "active";
   }, [statusFilter]);
 
-  const reportMap = useMemo(() => {
-    return new Map(reportOptions.map((report) => [report.meeting_id, report]));
-  }, [reportOptions]);
+  const filteredMeetingOptions = useMemo(() => {
+    if (!form.meeting_type_id) return [];
 
-  const selectedReport = useMemo(() => {
+    return meetingOptions.filter(
+      (meeting) => String(meeting.meeting_type_id) === form.meeting_type_id,
+    );
+  }, [form.meeting_type_id, meetingOptions]);
+
+  const selectedMeeting = useMemo(() => {
     if (!form.meeting_id) return null;
 
     return (
-      reportOptions.find((report) => String(report.meeting_id) === form.meeting_id) ??
-      null
+      meetingOptions.find(
+        (meeting) => String(meeting.meeting_id) === form.meeting_id,
+      ) ?? null
     );
-  }, [form.meeting_id, reportOptions]);
+  }, [form.meeting_id, meetingOptions]);
 
   const showTopActions = participantActions.showTopActions;
   const showRowActions = participantActions.showRowActions;
-  const tableColumnCount = showRowActions ? 8 : 7;
+  const tableColumnCount = showRowActions ? 9 : 8;
 
   const loadParticipants = useCallback(async () => {
     setIsLoading(true);
@@ -197,21 +209,55 @@ export default function MeetingParticipantsPage() {
     }
   }, [debouncedSearch, isActiveFilter, numericPageSize, page]);
 
-  const loadReportOptions = useCallback(async () => {
-    setReportLoading(true);
+  const loadOptions = useCallback(async () => {
+    setOptionLoading(true);
 
     try {
-      const response = await listMeetingMaster({
-        page: 1,
-        pageSize: 100,
-        isActive: true,
-      });
+      const [typeResponse, meetingResponse, teamResponse] = await Promise.all([
+        listMeetingTypes({
+          page_size: 100,
+          is_active: true,
+          sort_by: "meeting_type_name",
+          sort_order: "asc",
+        }),
+        listMeetingMaster({
+          page: 1,
+          pageSize: 100,
+          isActive: true,
+        }),
+        listMeetingParticipantInternalTeams(),
+      ]);
 
-      setReportOptions(response.items);
+      setMeetingTypes(typeResponse.items);
+      setMeetingOptions(meetingResponse.items);
+      setInternalTeamOptions(teamResponse.items);
     } catch {
-      setReportOptions([]);
+      setMeetingTypes([]);
+      setMeetingOptions([]);
+      setInternalTeamOptions([]);
     } finally {
-      setReportLoading(false);
+      setOptionLoading(false);
+    }
+  }, []);
+
+  const loadEntityContacts = useCallback(async (meetingId: string) => {
+    if (!meetingId) {
+      setEntityContactOptions([]);
+      return;
+    }
+
+    setContactLoading(true);
+
+    try {
+      const response = await listMeetingParticipantEntityContacts(
+        Number.parseInt(meetingId, 10),
+      );
+
+      setEntityContactOptions(response.items);
+    } catch {
+      setEntityContactOptions([]);
+    } finally {
+      setContactLoading(false);
     }
   }, []);
 
@@ -227,40 +273,30 @@ export default function MeetingParticipantsPage() {
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
-      void loadReportOptions();
+      void loadOptions();
     }, 0);
 
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [loadReportOptions]);
+  }, [loadOptions]);
 
   const resetToFirstPage = () => {
     setPage(1);
   };
 
   const openCreateDrawer = () => {
-    setDrawerMode("create");
-    setSelectedItem(null);
     setForm(emptyForm);
     setDrawerOpen(true);
-    void loadReportOptions();
-  };
-
-  const openEditDrawer = (item: MeetingParticipant) => {
-    setDrawerMode("edit");
-    setSelectedItem(item);
-    setForm(buildFormFromItem(item));
-    setDrawerOpen(true);
-    void loadReportOptions();
+    void loadOptions();
   };
 
   const closeDrawer = () => {
     if (submitLoading) return;
 
     setDrawerOpen(false);
-    setSelectedItem(null);
     setForm(emptyForm);
+    setEntityContactOptions([]);
   };
 
   const openConfirm = (item: MeetingParticipant, action: ConfirmAction) => {
@@ -276,22 +312,34 @@ export default function MeetingParticipantsPage() {
   };
 
   const validateForm = () => {
+    if (!form.meeting_type_id.trim()) {
+      setMessage({ type: "error", text: "Meeting Type is required." });
+      return false;
+    }
+
     if (!form.meeting_id.trim()) {
-      setMessage({ type: "error", text: "Meeting Master is required." });
+      setMessage({ type: "error", text: "Meeting Name is required." });
       return false;
     }
 
-    if (!form.name.trim()) {
-      setMessage({ type: "error", text: "Participant name is required." });
+    if (!form.source_type) {
+      setMessage({ type: "error", text: "Participant Source is required." });
       return false;
     }
 
-    const reportId = Number.parseInt(form.meeting_id, 10);
-    if (Number.isNaN(reportId) || reportId <= 0) {
-      setMessage({
-        type: "error",
-        text: "Meeting Master must be a valid selection.",
-      });
+    if (
+      form.source_type === "internal_audit_team" &&
+      !form.audit_team_id.trim()
+    ) {
+      setMessage({ type: "error", text: "Audit Team is required." });
+      return false;
+    }
+
+    if (
+      form.source_type === "client_entity_team" &&
+      !form.entity_contact_id.trim()
+    ) {
+      setMessage({ type: "error", text: "Entity contact is required." });
       return false;
     }
 
@@ -307,27 +355,22 @@ export default function MeetingParticipantsPage() {
     setMessage(null);
 
     try {
-      const successText =
-        drawerMode === "create"
-          ? "Meeting Participant record created successfully."
-          : "Meeting Participant record updated successfully.";
-
-      if (drawerMode === "create") {
-        await createMeetingParticipant(buildPayload(form));
-      } else if (selectedItem) {
-        await updateMeetingParticipant(
-          selectedItem.participant_id,
-          buildPayload(form),
-        );
-      }
+      const response = await createMeetingParticipant(buildPayload(form));
 
       setDrawerOpen(false);
-      setSelectedItem(null);
       setForm(emptyForm);
+      setEntityContactOptions([]);
 
       await loadParticipants();
 
-      setMessage({ type: "success", text: successText });
+      const addedCount = Array.isArray(response.data) ? response.data.length : 0;
+      setMessage({
+        type: "success",
+        text:
+          addedCount > 1
+            ? `${addedCount} Meeting Participants added successfully.`
+            : response.message,
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -394,7 +437,7 @@ export default function MeetingParticipantsPage() {
               </p>
               <h1 className="mt-2 text-3xl font-black">Meeting Participants</h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-slate-300">
-                Maintain meeting participants under Meeting Master.
+                Add meeting participants from Internal Audit Team or Client/Entity contacts.
               </p>
             </div>
 
@@ -445,7 +488,7 @@ export default function MeetingParticipantsPage() {
               label: "Search",
               type: "search",
               value: search,
-              placeholder: "Search name, designation, signature...",
+              placeholder: "Search meeting, source, participant, designation...",
               onChange: (value) => {
                 setSearch(value);
                 resetToFirstPage();
@@ -486,10 +529,11 @@ export default function MeetingParticipantsPage() {
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-black uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-4">ID</th>
-                <th className="px-5 py-4">Report</th>
-                <th className="px-5 py-4">Name</th>
+                <th className="px-5 py-4">Meeting Name</th>
+                <th className="px-5 py-4">Meeting Type</th>
+                <th className="px-5 py-4">Source</th>
+                <th className="px-5 py-4">Participant Name</th>
                 <th className="px-5 py-4">Designation</th>
-                <th className="px-5 py-4">Signature</th>
                 <th className="px-5 py-4">Status</th>
                 <th className="px-5 py-4">Created</th>
                 {showRowActions ? (
@@ -519,7 +563,7 @@ export default function MeetingParticipantsPage() {
                         No Meeting Participant records found
                       </p>
                       <p className="mt-1 text-sm text-slate-400">
-                        Add participants under an existing Meeting Master.
+                        Add participants from an Internal Audit Team or Client/Entity contact.
                       </p>
                     </div>
                   </td>
@@ -527,91 +571,83 @@ export default function MeetingParticipantsPage() {
               ) : null}
 
               {!isLoading
-                ? items.map((item) => {
-                    const report = reportMap.get(item.meeting_id);
-
-                    return (
-                      <tr key={item.participant_id} className="hover:bg-slate-50">
-                        <td className="px-5 py-4 text-sm font-black text-slate-900">
-                          #{item.participant_id}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="text-sm font-black text-slate-800">
-                            Meeting Master #{item.meeting_id}
+                ? items.map((item) => (
+                    <tr key={item.participant_id} className="hover:bg-slate-50">
+                      <td className="px-5 py-4 text-sm font-black text-slate-900">
+                        #{item.participant_id}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="text-sm font-black text-slate-800">
+                          {item.meeting_name || `Meeting #${item.meeting_id}`}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          {item.client_code || "-"}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-sm font-bold text-slate-600">
+                        {item.meeting_type || "-"}
+                      </td>
+                      <td className="px-5 py-4">
+                        <CrudPillBadge>{item.source_label || "-"}</CrudPillBadge>
+                        {item.audit_team_name ? (
+                          <div className="mt-1 text-xs text-slate-400">
+                            {item.audit_team_name}
                           </div>
-                          {report ? (
-                            <div className="mt-1 text-xs text-slate-400">
-                              {report.meeting_name} — {report.client_code}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-black text-slate-800">
-                          {item.name}
-                        </td>
-                        <td className="px-5 py-4 text-sm text-slate-500">
-                          {item.designation || "-"}
-                        </td>
-                        <td className="px-5 py-4">
-                          <CrudPillBadge>{item.signature || "-"}</CrudPillBadge>
-                        </td>
-                        <td className="px-5 py-4">
-                          <CrudStatusBadge active={item.is_active} />
-                        </td>
-                        <td className="px-5 py-4 text-sm text-slate-500">
-                          {formatDate(item.created_at)}
-                        </td>
-
-                        {showRowActions ? (
-                          <td className="px-5 py-4">
-                            <div className="flex justify-end gap-2">
-                              {participantActions.canUpdate ? (
-                                <button
-                                  onClick={() => openEditDrawer(item)}
-                                  className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-amber-50 hover:text-amber-600"
-                                  title="Edit"
-                                >
-                                  <Pencil size={16} />
-                                </button>
-                              ) : null}
-
-                              {item.is_active && participantActions.canDelete ? (
-                                <button
-                                  onClick={() => openConfirm(item, "delete")}
-                                  className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
-                                  title="Inactive"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              ) : null}
-
-                              {!item.is_active && participantActions.canRestore ? (
-                                <button
-                                  onClick={() => openConfirm(item, "restore")}
-                                  className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-green-50 hover:text-green-600"
-                                  title="Restore"
-                                >
-                                  <RotateCcw size={16} />
-                                </button>
-                              ) : null}
-
-                              {!item.is_active &&
-                              participantActions.canPermanentDelete ? (
-                                <button
-                                  onClick={() =>
-                                    openConfirm(item, "permanent_delete")
-                                  }
-                                  className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-600 transition hover:bg-red-100"
-                                  title="Permanent Delete"
-                                >
-                                  <AlertTriangle size={16} />
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
                         ) : null}
-                      </tr>
-                    );
-                  })
+                      </td>
+                      <td className="px-5 py-4 text-sm font-black text-slate-800">
+                        {item.participant_name || "-"}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-slate-500">
+                        {item.designation || "-"}
+                      </td>
+                      <td className="px-5 py-4">
+                        <CrudStatusBadge active={item.is_active} />
+                      </td>
+                      <td className="px-5 py-4 text-sm text-slate-500">
+                        {formatDate(item.created_at)}
+                      </td>
+
+                      {showRowActions ? (
+                        <td className="px-5 py-4">
+                          <div className="flex justify-end gap-2">
+                            {item.is_active && participantActions.canDelete ? (
+                              <button
+                                onClick={() => openConfirm(item, "delete")}
+                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
+                                title="Inactive"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            ) : null}
+
+                            {!item.is_active && participantActions.canRestore ? (
+                              <button
+                                onClick={() => openConfirm(item, "restore")}
+                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-green-50 hover:text-green-600"
+                                title="Restore"
+                              >
+                                <RotateCcw size={16} />
+                              </button>
+                            ) : null}
+
+                            {!item.is_active &&
+                            participantActions.canPermanentDelete ? (
+                              <button
+                                onClick={() =>
+                                  openConfirm(item, "permanent_delete")
+                                }
+                                className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-600 transition hover:bg-red-100"
+                                title="Permanent Delete"
+                              >
+                                <AlertTriangle size={16} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))
                 : null}
             </tbody>
           </table>
@@ -630,7 +666,7 @@ export default function MeetingParticipantsPage() {
         isOpen={drawerOpen}
         onClose={closeDrawer}
         title="Meeting Participant"
-        description={drawerMode === "create" ? "Create" : "Edit"}
+        description="Create from source"
         maxWidthClassName="max-w-3xl"
         footer={
           <>
@@ -653,7 +689,7 @@ export default function MeetingParticipantsPage() {
               ) : (
                 <Users className="h-4 w-4" />
               )}
-              {drawerMode === "create" ? "Create" : "Update"}
+              Create
             </button>
           </>
         }
@@ -664,75 +700,137 @@ export default function MeetingParticipantsPage() {
           className="space-y-5"
         >
           <CrudSelectField
-            label="Meeting Master"
+            label="Meeting Type"
+            value={form.meeting_type_id}
+            options={[
+              {
+                value: "",
+                label: optionLoading ? "Loading Meeting Types..." : "Select Meeting Type",
+              },
+              ...meetingTypes.map((meetingType) => ({
+                value: String(meetingType.meeting_type_id),
+                label: meetingType.meeting_type_name,
+              })),
+            ]}
+            onChange={(value) => {
+              setForm((current) => ({
+                ...current,
+                meeting_type_id: value,
+                meeting_id: "",
+                audit_team_id: "",
+                entity_contact_id: "",
+              }));
+              setEntityContactOptions([]);
+            }}
+          />
+
+          <CrudSelectField
+            label="Meeting Name"
             value={form.meeting_id}
             options={[
               {
                 value: "",
-                label: reportLoading
-                  ? "Loading Meeting Master..."
-                  : "Select Meeting Master",
+                label: form.meeting_type_id
+                  ? "Select Meeting Name"
+                  : "Select Meeting Type first",
               },
-              ...reportOptions.map((report) => ({
-                value: String(report.meeting_id),
-                label: buildReportLabel(report),
+              ...filteredMeetingOptions.map((meeting) => ({
+                value: String(meeting.meeting_id),
+                label: buildMeetingLabel(meeting),
               })),
             ]}
-            onChange={(value) =>
-              setForm((current) => ({ ...current, meeting_id: value }))
-            }
+            onChange={(value) => {
+              setForm((current) => ({
+                ...current,
+                meeting_id: value,
+                entity_contact_id: "",
+              }));
+              void loadEntityContacts(value);
+            }}
           />
 
-          {selectedReport ? (
+          {selectedMeeting ? (
             <div className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 md:grid-cols-2">
               <div>
-                <span className="font-black">Meeting Master:</span> #
-                {selectedReport.meeting_id}
+                <span className="font-black">Meeting Name:</span>{" "}
+                {selectedMeeting.meeting_name}
               </div>
               <div>
-                <span className="font-black">Meeting Name:</span>{" "}
-                {selectedReport.meeting_name}
+                <span className="font-black">Meeting Type:</span>{" "}
+                {selectedMeeting.meeting_type}
               </div>
               <div>
                 <span className="font-black">Client Code:</span>{" "}
-                {selectedReport.client_code}
+                {selectedMeeting.client_code}
               </div>
               <div>
                 <span className="font-black">Meeting Date:</span>{" "}
-                {formatDate(selectedReport.meeting_date)}
+                {formatDate(selectedMeeting.meeting_date)}
               </div>
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <CrudTextField
-              label="Participant Name"
-              value={form.name}
-              required
-              placeholder="Example: John Doe"
-              onChange={(value) =>
-                setForm((current) => ({ ...current, name: value }))
-              }
-            />
-
-            <CrudTextField
-              label="Designation"
-              value={form.designation}
-              placeholder="Example: Audit Manager"
-              onChange={(value) =>
-                setForm((current) => ({ ...current, designation: value }))
-              }
-            />
-          </div>
-
-          <CrudTextField
-            label="Signature"
-            value={form.signature}
-            placeholder="Signature text/reference"
-            onChange={(value) =>
-              setForm((current) => ({ ...current, signature: value }))
-            }
+          <CrudSelectField
+            label="Participant Source"
+            value={form.source_type}
+            options={[
+              { value: "", label: "Select Participant Source" },
+              { value: "internal_audit_team", label: "From Internal Audit Team" },
+              { value: "client_entity_team", label: "From Client/Entity Team" },
+            ]}
+            onChange={(value) => {
+              setForm((current) => ({
+                ...current,
+                source_type: value as MeetingParticipantSourceType | "",
+                audit_team_id: "",
+                entity_contact_id: "",
+              }));
+            }}
           />
+
+          {form.source_type === "internal_audit_team" ? (
+            <CrudSelectField
+              label="Audit Team"
+              value={form.audit_team_id}
+              options={[
+                {
+                  value: "",
+                  label: optionLoading ? "Loading Audit Teams..." : "Select Audit Team",
+                },
+                ...internalTeamOptions.map((team) => ({
+                  value: String(team.team_id),
+                  label: `${team.team_name} (Team #${team.team_id})`,
+                })),
+              ]}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, audit_team_id: value }))
+              }
+            />
+          ) : null}
+
+          {form.source_type === "client_entity_team" ? (
+            <CrudSelectField
+              label="Contact"
+              value={form.entity_contact_id}
+              options={[
+                {
+                  value: "",
+                  label: contactLoading
+                    ? "Loading Contacts..."
+                    : form.meeting_id
+                      ? "Select Contact"
+                      : "Select Meeting Name first",
+                },
+                ...entityContactOptions.map((contact) => ({
+                  value: String(contact.id),
+                  label: `${contact.contact_name} (ID ${contact.id})`,
+                })),
+              ]}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, entity_contact_id: value }))
+              }
+            />
+          ) : null}
 
           {message && drawerOpen && message.type === "error" ? (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
@@ -761,7 +859,7 @@ export default function MeetingParticipantsPage() {
                   this Meeting Participant record?
                 </p>
                 <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-bold text-slate-700">
-                  {confirmItem.name}
+                  {confirmItem.participant_name || `#${confirmItem.participant_id}`}
                 </p>
               </div>
             </div>
@@ -790,4 +888,3 @@ export default function MeetingParticipantsPage() {
     </div>
   );
 }
-

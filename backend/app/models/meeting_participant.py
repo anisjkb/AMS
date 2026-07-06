@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import ActiveStatusMixin, AuditMixin, Base
@@ -14,32 +14,36 @@ class MeetingParticipant(ActiveStatusMixin, AuditMixin, Base):
         autoincrement=True,
     )
 
-    report_id: Mapped[int] = mapped_column(
+    meeting_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("meeting_reports.report_id", ondelete="RESTRICT"),
+        ForeignKey("meeting_master.meeting_id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+    )
+
+    source_type: Mapped[str] = mapped_column(
+        String(50),
+        index=True,
+        nullable=False,
+    )
+
+    audit_team_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("audit_teams.team_id", ondelete="RESTRICT"),
         index=True,
         nullable=True,
     )
 
-    meeting_id: Mapped[int] = mapped_column(
+    audit_team_member_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("meeting_master.meeting_id"),
+        ForeignKey("audit_team_members.team_member_id", ondelete="RESTRICT"),
         index=True,
-        nullable=False,
+        nullable=True,
     )
 
-    name: Mapped[str] = mapped_column(
-        String(150),
+    entity_contact_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("audit_entity_contacts.id", ondelete="RESTRICT"),
         index=True,
-        nullable=False,
-    )
-
-    designation: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    )
-
-    signature: Mapped[str | None] = mapped_column(
-        Text,
         nullable=True,
     )
