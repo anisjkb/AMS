@@ -15,6 +15,7 @@ from app.api.v1.audit_entity_financial_snapshots import router as audit_entity_f
 from app.api.v1.audit_entity_licenses import router as audit_entity_licenses_router
 from app.api.v1.audit_entity_tax_assessments import router as audit_entity_tax_assessments_router
 from app.api.v1.audit_master import router as audit_master_router
+from app.api.v1.audit_type import router as audit_type_router
 from app.api.v1.audit_subjects import router as audit_subjects_router
 from app.api.v1.audit_team_members import router as audit_team_members_router
 from app.api.v1.audit_teams import router as audit_teams_router
@@ -61,6 +62,7 @@ api_router.include_router(audit_entity_financial_snapshots_router)
 api_router.include_router(audit_entity_licenses_router)
 api_router.include_router(audit_entity_tax_assessments_router)
 api_router.include_router(audit_master_router)
+api_router.include_router(audit_type_router)
 api_router.include_router(audit_subjects_router)
 api_router.include_router(audit_team_members_router)
 api_router.include_router(audit_teams_router)

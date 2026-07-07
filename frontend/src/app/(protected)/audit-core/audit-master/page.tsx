@@ -26,6 +26,7 @@ import CrudSelectField from "@/components/crud/fields/CrudSelectField";
 import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
 import CrudTextField from "@/components/crud/fields/CrudTextField";
 import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
+import { listAuditTypes, type AuditType } from "@/services/auditType";
 import {
   createAuditMaster,
   deactivateAuditMaster,
@@ -77,16 +78,6 @@ const statusOptions = [
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
   { value: "inactive", label: "Inactive" },
-];
-
-const auditTypeOptions = [
-  { value: "Compliance Audit", label: "Compliance Audit" },
-  { value: "Financial Audit", label: "Financial Audit" },
-  { value: "Operational Audit", label: "Operational Audit" },
-  { value: "Management Audit", label: "Management Audit" },
-  { value: "Internal Audit", label: "Internal Audit" },
-  { value: "IT Audit", label: "IT Audit" },
-  { value: "Special Audit", label: "Special Audit" },
 ];
 
 function formatDate(value: string | null | undefined) {
@@ -156,6 +147,9 @@ export default function AuditMasterPage() {
   const [entityOptions, setEntityOptions] = useState<AuditEntity[]>([]);
   const [entityLoading, setEntityLoading] = useState(false);
 
+  const [auditTypeOptions, setAuditTypeOptions] = useState<AuditType[]>([]);
+  const [auditTypeLoading, setAuditTypeLoading] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [message, setMessage] = useState<PageMessage | null>(null);
@@ -220,6 +214,25 @@ export default function AuditMasterPage() {
     );
   }, [entityOptions, form.client_id]);
 
+  const auditTypeSelectOptions = useMemo(() => {
+    const options = auditTypeOptions.map((auditType) => ({
+      value: auditType.audit_type_name,
+      label: auditType.audit_type_name,
+    }));
+
+    if (
+      form.audit_type &&
+      !options.some((option) => option.value === form.audit_type)
+    ) {
+      options.unshift({
+        value: form.audit_type,
+        label: `${form.audit_type} (Saved)`,
+      });
+    }
+
+    return options;
+  }, [auditTypeOptions, form.audit_type]);
+
   const showTopActions = auditMasterActions.showTopActions;
   const showRowActions = auditMasterActions.showRowActions;
   const tableColumnCount = showRowActions ? 9 : 8;
@@ -269,6 +282,23 @@ export default function AuditMasterPage() {
       setEntityOptions([]);
     } finally {
       setEntityLoading(false);
+    }
+  }, []);
+
+  const loadAuditTypeCatalog = useCallback(async () => {
+    setAuditTypeLoading(true);
+
+    try {
+      const response = await listAuditTypes();
+      setAuditTypeOptions(response.items);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to load Audit Types.";
+
+      setAuditTypeOptions([]);
+      setMessage({ type: "error", text: errorMessage });
+    } finally {
+      setAuditTypeLoading(false);
     }
   }, []);
 
@@ -324,6 +354,16 @@ export default function AuditMasterPage() {
     };
   }, [loadEntityCatalog]);
 
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      void loadAuditTypeCatalog();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [loadAuditTypeCatalog]);
+
   const resetToFirstPage = () => {
     setPage(1);
   };
@@ -334,6 +374,7 @@ export default function AuditMasterPage() {
     setForm(emptyForm);
     setDrawerOpen(true);
     void loadEntityCatalog();
+    void loadAuditTypeCatalog();
   };
 
   const openEditDrawer = (item: AuditMaster) => {
@@ -341,6 +382,7 @@ export default function AuditMasterPage() {
     setSelectedItem(item);
     setForm(buildFormFromItem(item));
     setDrawerOpen(true);
+    void loadAuditTypeCatalog();
     void hydrateSelectedClientForEdit(item);
   };
 
@@ -823,8 +865,13 @@ export default function AuditMasterPage() {
               label="Audit Type"
               value={form.audit_type}
               options={[
-                { value: "", label: "Select Audit Type" },
-                ...auditTypeOptions,
+                {
+                  value: "",
+                  label: auditTypeLoading
+                    ? "Loading Audit Types..."
+                    : "Select Audit Type",
+                },
+                ...auditTypeSelectOptions,
               ]}
               onChange={(value) =>
                 setForm((current) => ({ ...current, audit_type: value }))
