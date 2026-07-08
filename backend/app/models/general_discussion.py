@@ -11,7 +11,7 @@ class GeneralDiscussion(Base):
     audit_id = Column(Integer, nullable=True)
     audit_type = Column(String(150), nullable=False)
 
-    title = Column(String(255), nullable=False)
+    title = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
     decision = Column(Text, nullable=True)
 
