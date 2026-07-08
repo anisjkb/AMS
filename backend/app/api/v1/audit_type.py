@@ -27,7 +27,7 @@ async def list_audit_type(
     sort_by: str = "audit_type_name",
     sort_order: str = "asc",
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("menu.audit_master.view")),
+    current_user: User = Depends(require_permission("menu.audit_type.view")),
 ):
     service = AuditTypeService(db)
 
@@ -46,7 +46,7 @@ async def list_audit_type(
 async def get_audit_type(
     audit_type_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("menu.audit_master.view")),
+    current_user: User = Depends(require_permission("menu.audit_type.view")),
 ):
     service = AuditTypeService(db)
     return await service.get_audit_type(audit_type_id)
@@ -60,7 +60,7 @@ async def get_audit_type(
 async def create_audit_type(
     payload: AuditTypeCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.audit_master.create")),
+    current_user: User = Depends(require_permission("api.audit_type.create")),
 ):
     service = AuditTypeService(db)
 
@@ -75,7 +75,7 @@ async def update_audit_type(
     audit_type_id: int,
     payload: AuditTypeUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.audit_master.update")),
+    current_user: User = Depends(require_permission("api.audit_type.update")),
 ):
     service = AuditTypeService(db)
 
@@ -90,7 +90,7 @@ async def update_audit_type(
 async def delete_audit_type(
     audit_type_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.audit_master.delete")),
+    current_user: User = Depends(require_permission("api.audit_type.delete")),
 ):
     service = AuditTypeService(db)
 
@@ -104,7 +104,7 @@ async def delete_audit_type(
 async def restore_audit_type(
     audit_type_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permission("api.audit_master.restore")),
+    current_user: User = Depends(require_permission("api.audit_type.restore")),
 ):
     service = AuditTypeService(db)
 
@@ -122,7 +122,7 @@ async def permanent_delete_audit_type(
     audit_type_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(
-        require_permission("api.audit_master.permanent_delete")
+        require_permission("api.audit_type.permanent_delete")
     ),
 ):
     service = AuditTypeService(db)

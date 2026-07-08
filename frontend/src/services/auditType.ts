@@ -1,11 +1,47 @@
+async function requestJson<T>(
+  input: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(init.headers);
+
+  if (!headers.has("Content-Type") && init.body) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(input, {
+    ...init,
+    headers,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+
+    try {
+      const data = await response.json();
+      message = data?.detail || data?.message || message;
+    } catch {
+      // Keep default message.
+    }
+
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
+}
+
 export type AuditType = {
   audit_type_id: number;
   audit_type_name: string;
   description: string | null;
   status: string;
   is_active: boolean;
-  created_by: string | null;
-  updated_by: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -17,36 +53,103 @@ export type AuditTypeListResponse = {
   items: AuditType[];
 };
 
-async function requestJson<T>(
-  url: string,
-  options?: RequestInit,
-): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(options?.headers ?? {}),
-    },
+export type AuditTypePayload = {
+  audit_type_name: string;
+  description?: string | null;
+  status: string;
+};
+
+export type AuditTypeUpdatePayload = Partial<AuditTypePayload> & {
+  is_active?: boolean;
+};
+
+export type AuditTypeListParams = {
+  page?: number;
+  page_size?: number;
+  search?: string;
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
+  is_active?: boolean;
+  status?: string;
+};
+
+function buildQuery(params: AuditTypeListParams = {}): string {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    searchParams.set(key, String(value));
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    const message =
-      error?.detail || error?.message || "Audit Type request failed.";
-
-    throw new Error(message);
-  }
-
-  return (await response.json()) as T;
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
 }
 
-export async function listAuditTypes() {
+export async function listAuditTypes(
+  params: AuditTypeListParams = {},
+): Promise<AuditTypeListResponse> {
   return requestJson<AuditTypeListResponse>(
-    "/api/backend/audit-type?page=1&page_size=100&is_active=true&sort_by=audit_type_name&sort_order=asc",
+    `/api/backend/audit-type${buildQuery(params)}`,
+  );
+}
+
+export async function createAuditType(
+  payload: AuditTypePayload,
+): Promise<{ message: string; data: AuditType | null }> {
+  return requestJson<{ message: string; data: AuditType | null }>(
+    "/api/backend/audit-type",
     {
-      method: "GET",
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateAuditType(
+  auditTypeId: number,
+  payload: AuditTypeUpdatePayload,
+): Promise<{ message: string; data: AuditType | null }> {
+  return requestJson<{ message: string; data: AuditType | null }>(
+    `/api/backend/audit-type/${auditTypeId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deactivateAuditType(
+  auditTypeId: number,
+): Promise<{ message: string; data: AuditType | null }> {
+  return requestJson<{ message: string; data: AuditType | null }>(
+    `/api/backend/audit-type/${auditTypeId}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export async function restoreAuditType(
+  auditTypeId: number,
+): Promise<{ message: string; data: AuditType | null }> {
+  return requestJson<{ message: string; data: AuditType | null }>(
+    `/api/backend/audit-type/${auditTypeId}/restore`,
+    {
+      method: "PATCH",
+    },
+  );
+}
+
+export async function permanentDeleteAuditType(
+  auditTypeId: number,
+): Promise<{ message: string; data: AuditType | null }> {
+  return requestJson<{ message: string; data: AuditType | null }>(
+    `/api/backend/audit-type/${auditTypeId}/permanent`,
+    {
+      method: "DELETE",
     },
   );
 }
