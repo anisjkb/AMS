@@ -358,6 +358,15 @@ export default function AuditDiscussionIssuesPage() {
             ...emptyForm,
             audit_type: current.audit_type,
           }));
+
+          window.setTimeout(() => {
+            const discussionPointInput = document.querySelector<HTMLInputElement>(
+              'input[placeholder="Example: Review compliance documents"]',
+            );
+
+            discussionPointInput?.focus();
+          }, 0);
+
           await loadAuditDiscussionIssues();
           setMessage({
             type: "success",
@@ -816,7 +825,9 @@ export default function AuditDiscussionIssuesPage() {
                 <p className="mt-1 text-sm text-slate-500">
                   Are you sure you want to{" "}
                   <span className="font-black text-slate-700">
-                    {toTitle(confirmAction)}
+                    {confirmAction === "delete"
+                      ? "Inactive"
+                      : toTitle(confirmAction)}
                   </span>{" "}
                   this Audit Discussion Issue?
                 </p>
