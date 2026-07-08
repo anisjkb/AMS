@@ -36,8 +36,10 @@ class GeneralDiscussionRepository:
             search_term = f"%{search.strip()}%"
             filters.append(
                 or_(
+                    GeneralDiscussion.audit_type.ilike(search_term),
                     GeneralDiscussion.title.ilike(search_term),
                     GeneralDiscussion.description.ilike(search_term),
+                    GeneralDiscussion.decision.ilike(search_term),
                     GeneralDiscussion.status.ilike(search_term),
                     cast(GeneralDiscussion.audit_id, String).ilike(search_term),
                 )

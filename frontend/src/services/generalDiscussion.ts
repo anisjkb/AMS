@@ -1,8 +1,10 @@
 export type GeneralDiscussion = {
   id: number;
-  audit_id: number;
+  audit_id?: number | null;
+  audit_type: string;
   title: string;
   description: string | null;
+  decision: string | null;
   created_by?: number | null;
   status: string;
   is_active: boolean;
@@ -11,9 +13,11 @@ export type GeneralDiscussion = {
 };
 
 export type GeneralDiscussionPayload = {
-  audit_id: number;
+  audit_id?: number | null;
+  audit_type: string;
   title: string;
   description?: string | null;
+  decision?: string | null;
   created_by?: number | null;
   status: string;
   is_active?: boolean;

@@ -17,6 +17,13 @@ class GeneralDiscussionService:
     async def create(self, db: AsyncSession, data):
         payload = _to_dict(data)
         payload.setdefault("is_active", True)
+
+        if not str(payload.get("audit_type", "")).strip():
+            raise ValueError("Audit Type is required")
+
+        if not str(payload.get("title", "")).strip():
+            raise ValueError("Title is required")
+
         obj = GeneralDiscussion(**payload)
         return await self.repo.create(db, obj)
 
@@ -42,8 +49,17 @@ class GeneralDiscussionService:
         )
 
     async def update(self, db: AsyncSession, obj, data):
-        for key, value in _to_dict(data).items():
+        payload = _to_dict(data)
+
+        if "audit_type" in payload and not str(payload.get("audit_type", "")).strip():
+            raise ValueError("Audit Type is required")
+
+        if "title" in payload and not str(payload.get("title", "")).strip():
+            raise ValueError("Title is required")
+
+        for key, value in payload.items():
             setattr(obj, key, value)
+
         return await self.repo.update(db, obj)
 
     async def deactivate(self, db: AsyncSession, obj):

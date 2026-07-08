@@ -24,7 +24,7 @@ import {
 import CrudSelectField from "@/components/crud/fields/CrudSelectField";
 import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
 import CrudTextField from "@/components/crud/fields/CrudTextField";
-import { listAuditMaster, type AuditMaster } from "@/services/auditMaster";
+import { listAuditTypes, type AuditType } from "@/services/auditType";
 import {
   createGeneralDiscussion,
   deactivateGeneralDiscussion,
@@ -44,7 +44,7 @@ type SaveMode = "add_another" | "close";
 const confirmActionLabel: Record<ConfirmAction, string> = {
   inactive: "Inactive",
   restore: "Restore",
-  permanent_delete: "Permanently Delete",
+  permanent_delete: "Permanent Delete",
 };
 
 type PageMessage = {
@@ -53,16 +53,18 @@ type PageMessage = {
 };
 
 type FormState = {
-  audit_id: string;
+  audit_type: string;
   title: string;
   description: string;
+  decision: string;
   status: string;
 };
 
 const emptyForm: FormState = {
-  audit_id: "",
+  audit_type: "",
   title: "",
   description: "",
+  decision: "",
   status: "active",
 };
 
@@ -102,53 +104,22 @@ function truncateText(value: string | null | undefined, maxLength = 95) {
   return `${value.slice(0, maxLength).trim()}...`;
 }
 
-function readTextField(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = record[key];
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-
-    if (typeof value === "number") {
-      return String(value);
-    }
-  }
-
-  return "";
-}
-
-function buildAuditLabel(audit: AuditMaster) {
-  const record = audit as unknown as Record<string, unknown>;
-  const auditId = readTextField(record, ["audit_id", "id"]);
-  const auditCode = readTextField(record, ["audit_code", "code"]);
-  const auditTitle = readTextField(record, [
-    "audit_title",
-    "title",
-    "audit_name",
-    "name",
-    "audit_type",
-  ]);
-
-  return [auditId ? `Audit #${auditId}` : "", auditCode, auditTitle]
-    .filter(Boolean)
-    .join(" - ");
-}
-
 function buildFormFromItem(item: GeneralDiscussion): FormState {
   return {
-    audit_id: String(item.audit_id),
+    audit_type: item.audit_type ?? "",
     title: item.title,
     description: item.description ?? "",
+    decision: item.decision ?? "",
     status: item.status,
   };
 }
 
 function buildPayload(form: FormState): GeneralDiscussionPayload {
   return {
-    audit_id: Number.parseInt(form.audit_id, 10),
+    audit_type: form.audit_type.trim(),
     title: form.title.trim(),
     description: form.description.trim() || null,
+    decision: form.decision.trim() || null,
     status: form.status.trim(),
   };
 }
@@ -165,7 +136,7 @@ export default function GeneralDiscussionIssuePage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const [auditOptions, setAuditOptions] = useState<AuditMaster[]>([]);
+  const [auditTypeOptions, setAuditTypeOptions] = useState<AuditType[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -205,18 +176,25 @@ export default function GeneralDiscussionIssuePage() {
     return statusFilter === "active";
   }, [statusFilter]);
 
-  const auditMap = useMemo(() => {
-    return new Map(
-      auditOptions.map((audit) => [
-        String((audit as unknown as Record<string, unknown>).audit_id),
-        audit,
-      ]),
-    );
-  }, [auditOptions]);
+  const auditTypeSelectOptions = useMemo(() => {
+    const options = auditTypeOptions.map((auditType) => ({
+      value: auditType.audit_type_name,
+      label: auditType.audit_type_name,
+    }));
+
+    if (
+      form.audit_type &&
+      !options.some((option) => option.value === form.audit_type)
+    ) {
+      return [{ value: form.audit_type, label: form.audit_type }, ...options];
+    }
+
+    return options;
+  }, [auditTypeOptions, form.audit_type]);
 
   const showTopActions = generalDiscussionActions.showTopActions;
   const showRowActions = generalDiscussionActions.showRowActions;
-  const tableColumnCount = showRowActions ? 8 : 7;
+  const tableColumnCount = showRowActions ? 9 : 8;
 
   const loadGeneralDiscussions = useCallback(async () => {
     setIsLoading(true);
@@ -246,19 +224,21 @@ export default function GeneralDiscussionIssuePage() {
     }
   }, [debouncedSearch, isActiveFilter, numericPageSize, page]);
 
-  const loadAuditOptions = useCallback(async () => {
+  const loadAuditTypes = useCallback(async () => {
     setCatalogLoading(true);
 
     try {
-      const response = await listAuditMaster({
+      const response = await listAuditTypes({
         page: 1,
-        pageSize: 100,
-        isActive: true,
+        page_size: 100,
+        is_active: true,
+        sort_by: "audit_type_name",
+        sort_order: "asc",
       });
 
-      setAuditOptions(response.items);
+      setAuditTypeOptions(response.items);
     } catch {
-      setAuditOptions([]);
+      setAuditTypeOptions([]);
     } finally {
       setCatalogLoading(false);
     }
@@ -276,13 +256,13 @@ export default function GeneralDiscussionIssuePage() {
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
-      void loadAuditOptions();
+      void loadAuditTypes();
     }, 0);
 
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [loadAuditOptions]);
+  }, [loadAuditTypes]);
 
   const resetToFirstPage = () => {
     setPage(1);
@@ -299,20 +279,21 @@ export default function GeneralDiscussionIssuePage() {
     }, 80);
   };
 
-  const openCreateDrawer = () => {
-    const firstAudit =
-      auditOptions[0] as unknown as Record<string, unknown> | undefined;
+  const getDefaultAuditType = () => {
+    return auditTypeOptions[0]?.audit_type_name ?? "";
+  };
 
+  const openCreateDrawer = () => {
     setDrawerMode("create");
     setSaveMode("add_another");
     setSessionCreatedCount(0);
     setSelectedItem(null);
     setForm({
       ...emptyForm,
-      audit_id: firstAudit?.audit_id ? String(firstAudit.audit_id) : "",
+      audit_type: getDefaultAuditType(),
     });
     setDrawerOpen(true);
-    void loadAuditOptions();
+    void loadAuditTypes();
     focusTitleField();
   };
 
@@ -322,7 +303,7 @@ export default function GeneralDiscussionIssuePage() {
     setSelectedItem(item);
     setForm(buildFormFromItem(item));
     setDrawerOpen(true);
-    void loadAuditOptions();
+    void loadAuditTypes();
     focusTitleField();
   };
 
@@ -347,10 +328,10 @@ export default function GeneralDiscussionIssuePage() {
   };
 
   const validateForm = () => {
-    if (!form.audit_id.trim()) {
+    if (!form.audit_type.trim()) {
       setMessage({
         type: "error",
-        text: "Please select a system-generated Audit Master record.",
+        text: "Please select an Audit Type.",
       });
       return false;
     }
@@ -386,7 +367,7 @@ export default function GeneralDiscussionIssuePage() {
         if (saveMode === "add_another") {
           setForm((current) => ({
             ...emptyForm,
-            audit_id: current.audit_id,
+            audit_type: current.audit_type,
             status: current.status || "active",
           }));
 
@@ -495,7 +476,7 @@ export default function GeneralDiscussionIssuePage() {
                 General Discussion Issue
               </h1>
               <p className="mt-2 max-w-3xl text-sm font-medium text-slate-300">
-                Manage general audit discussion issue records with system-generated audit references.
+                Manage general audit discussion issue records by Audit Type.
               </p>
             </div>
 
@@ -530,7 +511,7 @@ export default function GeneralDiscussionIssuePage() {
               label: "Search",
               type: "search",
               value: search,
-              placeholder: "Search title or description...",
+              placeholder: "Search audit type, title, description, or decision...",
               onChange: (value) => {
                 setSearch(value);
                 resetToFirstPage();
@@ -571,9 +552,10 @@ export default function GeneralDiscussionIssuePage() {
             <thead className="bg-slate-50">
               <tr className="text-left text-xs font-black uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-4">ID</th>
-                <th className="px-5 py-4">System Audit</th>
+                <th className="px-5 py-4">Audit Type</th>
                 <th className="px-5 py-4">Title</th>
                 <th className="px-5 py-4">Description</th>
+                <th className="px-5 py-4">Decision</th>
                 <th className="px-5 py-4">Status</th>
                 <th className="px-5 py-4">Active</th>
                 <th className="px-5 py-4">Created</th>
@@ -615,84 +597,81 @@ export default function GeneralDiscussionIssuePage() {
               ) : null}
 
               {!isLoading
-                ? items.map((item) => {
-                    const audit = auditMap.get(String(item.audit_id));
+                ? items.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="px-5 py-4 text-sm font-black text-slate-900">
+                        #{item.id}
+                      </td>
+                      <td className="px-5 py-4 text-sm font-bold text-slate-600">
+                        {item.audit_type || "-"}
+                      </td>
+                      <td className="px-5 py-4 text-sm font-bold text-slate-800">
+                        {item.title}
+                      </td>
+                      <td className="max-w-md px-5 py-4 text-sm text-slate-500">
+                        {truncateText(item.description)}
+                      </td>
+                      <td className="max-w-md px-5 py-4 text-sm text-slate-500">
+                        {truncateText(item.decision)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <CrudPillBadge>{toTitle(item.status)}</CrudPillBadge>
+                      </td>
+                      <td className="px-5 py-4">
+                        <CrudStatusBadge active={item.is_active} />
+                      </td>
+                      <td className="px-5 py-4 text-sm text-slate-500">
+                        {formatDate(item.created_at)}
+                      </td>
 
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="px-5 py-4 text-sm font-black text-slate-900">
-                          #{item.id}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-bold text-slate-600">
-                          {audit ? buildAuditLabel(audit) : `Audit #${item.audit_id}`}
-                        </td>
-                        <td className="px-5 py-4 text-sm font-bold text-slate-800">
-                          {item.title}
-                        </td>
-                        <td className="max-w-md px-5 py-4 text-sm text-slate-500">
-                          {truncateText(item.description)}
-                        </td>
+                      {showRowActions ? (
                         <td className="px-5 py-4">
-                          <CrudPillBadge>{toTitle(item.status)}</CrudPillBadge>
+                          <div className="flex justify-end gap-2">
+                            {generalDiscussionActions.canUpdate ? (
+                              <button
+                                onClick={() => openEditDrawer(item)}
+                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-amber-50 hover:text-amber-600"
+                                title="Edit"
+                              >
+                                <Pencil size={16} />
+                              </button>
+                            ) : null}
+
+                            {item.is_active && generalDiscussionActions.canDelete ? (
+                              <button
+                                onClick={() => openConfirm(item, "inactive")}
+                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
+                                title="Inactive"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            ) : null}
+
+                            {!item.is_active && generalDiscussionActions.canRestore ? (
+                              <button
+                                onClick={() => openConfirm(item, "restore")}
+                                className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-green-50 hover:text-green-600"
+                                title="Restore"
+                              >
+                                <RotateCcw size={16} />
+                              </button>
+                            ) : null}
+
+                            {!item.is_active &&
+                            generalDiscussionActions.canPermanentDelete ? (
+                              <button
+                                onClick={() => openConfirm(item, "permanent_delete")}
+                                className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-600 transition hover:bg-red-100"
+                                title="Permanent Delete"
+                              >
+                                <AlertTriangle size={16} />
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <CrudStatusBadge active={item.is_active} />
-                        </td>
-                        <td className="px-5 py-4 text-sm text-slate-500">
-                          {formatDate(item.created_at)}
-                        </td>
-
-                        {showRowActions ? (
-                          <td className="px-5 py-4">
-                            <div className="flex justify-end gap-2">
-                              {generalDiscussionActions.canUpdate ? (
-                                <button
-                                  onClick={() => openEditDrawer(item)}
-                                  className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-amber-50 hover:text-amber-600"
-                                  title="Edit"
-                                >
-                                  <Pencil size={16} />
-                                </button>
-                              ) : null}
-
-                              {item.is_active && generalDiscussionActions.canDelete ? (
-                                <button
-                                  onClick={() => openConfirm(item, "inactive")}
-                                  className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
-                                  title="Inactive"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              ) : null}
-
-                              {!item.is_active && generalDiscussionActions.canRestore ? (
-                                <button
-                                  onClick={() => openConfirm(item, "restore")}
-                                  className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-green-50 hover:text-green-600"
-                                  title="Restore"
-                                >
-                                  <RotateCcw size={16} />
-                                </button>
-                              ) : null}
-
-                              {!item.is_active &&
-                              generalDiscussionActions.canPermanentDelete ? (
-                                <button
-                                  onClick={() =>
-                                    openConfirm(item, "permanent_delete")
-                                  }
-                                  className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-600 transition hover:bg-red-100"
-                                  title="Permanent Delete"
-                                >
-                                  <AlertTriangle size={16} />
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
-                        ) : null}
-                      </tr>
-                    );
-                  })
+                      ) : null}
+                    </tr>
+                  ))
                 : null}
             </tbody>
           </table>
@@ -735,28 +714,28 @@ export default function GeneralDiscussionIssuePage() {
                   type="submit"
                   form="general-discussion-issue-form"
                   disabled={submitLoading}
-                  onClick={() => setSaveMode("close")}
+                  onClick={() => setSaveMode("add_another")}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {submitLoading && saveMode === "close" ? (
+                  {submitLoading && saveMode === "add_another" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : null}
-                  Save & Close
+                  Save & Add Another
                 </button>
 
                 <button
                   type="submit"
                   form="general-discussion-issue-form"
                   disabled={submitLoading}
-                  onClick={() => setSaveMode("add_another")}
+                  onClick={() => setSaveMode("close")}
                   className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {submitLoading && saveMode === "add_another" ? (
+                  {submitLoading && saveMode === "close" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <MessageSquareText className="h-4 w-4" />
                   )}
-                  Save & Add Another
+                  Save & Close
                 </button>
               </>
             ) : (
@@ -785,26 +764,17 @@ export default function GeneralDiscussionIssuePage() {
           className="space-y-5"
         >
           <CrudSelectField
-            label="System Audit"
-            value={form.audit_id}
+            label="Audit Type"
+            value={form.audit_type}
             options={[
               {
                 value: "",
-                label: catalogLoading
-                  ? "Loading system audit records..."
-                  : "Select system-generated audit record",
+                label: catalogLoading ? "Loading Audit Types..." : "Select Audit Type",
               },
-              ...auditOptions.map((audit) => {
-                const record = audit as unknown as Record<string, unknown>;
-
-                return {
-                  value: String(record.audit_id),
-                  label: buildAuditLabel(audit),
-                };
-              }),
+              ...auditTypeSelectOptions,
             ]}
             onChange={(value) =>
-              setForm((current) => ({ ...current, audit_id: value }))
+              setForm((current) => ({ ...current, audit_type: value }))
             }
           />
 
@@ -824,6 +794,15 @@ export default function GeneralDiscussionIssuePage() {
             placeholder="Write discussion issue description..."
             onChange={(value) =>
               setForm((current) => ({ ...current, description: value }))
+            }
+          />
+
+          <CrudTextAreaField
+            label="Decision"
+            value={form.decision}
+            placeholder="Write decision..."
+            onChange={(value) =>
+              setForm((current) => ({ ...current, decision: value }))
             }
           />
 
@@ -898,7 +877,3 @@ export default function GeneralDiscussionIssuePage() {
     </div>
   );
 }
-
-
-
-
