@@ -24,7 +24,7 @@ import {
 import CrudSelectField from "@/components/crud/fields/CrudSelectField";
 import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
 import CrudTextField from "@/components/crud/fields/CrudTextField";
-import { listAuditMaster } from "@/services/auditMaster";
+import { listAuditTypes } from "@/services/auditType";
 import {
   createAuditDiscussionIssue,
   deactivateAuditDiscussionIssue,
@@ -39,6 +39,7 @@ import {
 type StatusFilter = "all" | "active" | "inactive";
 type DrawerMode = "create" | "edit";
 type ConfirmAction = "delete" | "restore" | "permanent_delete";
+type SubmitMode = "close" | "another";
 
 type PageMessage = {
   type: "success" | "error";
@@ -128,6 +129,7 @@ export default function AuditDiscussionIssuesPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitMode, setSubmitMode] = useState<SubmitMode>("close");
   const [message, setMessage] = useState<PageMessage | null>(null);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -167,6 +169,25 @@ export default function AuditDiscussionIssuesPage() {
 
     return auditTypeFilter;
   }, [auditTypeFilter]);
+
+  const auditTypeSelectOptions = useMemo(() => {
+    const options = auditTypeOptions.map((auditType) => ({
+      value: auditType,
+      label: auditType,
+    }));
+
+    if (
+      form.audit_type &&
+      !options.some((option) => option.value === form.audit_type)
+    ) {
+      options.unshift({
+        value: form.audit_type,
+        label: `${form.audit_type} (Saved)`,
+      });
+    }
+
+    return options;
+  }, [auditTypeOptions, form.audit_type]);
 
   const showTopActions = discussionIssueActions.showTopActions;
   const showRowActions = discussionIssueActions.showRowActions;
@@ -211,19 +232,17 @@ export default function AuditDiscussionIssuesPage() {
     setCatalogLoading(true);
 
     try {
-      const response = await listAuditMaster({
+      const response = await listAuditTypes({
         page: 1,
-        pageSize: 100,
-        isActive: true,
+        page_size: 100,
+        is_active: true,
+        sort_by: "audit_type_name",
+        sort_order: "asc",
       });
 
-      const uniqueAuditTypes = Array.from(
-        new Set(
-          response.items
-            .map((audit) => audit.audit_type)
-            .filter((auditType) => auditType.trim().length > 0),
-        ),
-      ).sort((first, second) => first.localeCompare(second));
+      const uniqueAuditTypes = response.items
+        .map((auditType) => auditType.audit_type_name)
+        .filter((auditType) => auditType.trim().length > 0);
 
       setAuditTypeOptions(uniqueAuditTypes);
     } catch {
@@ -260,13 +279,11 @@ export default function AuditDiscussionIssuesPage() {
   const openCreateDrawer = () => {
     setDrawerMode("create");
     setSelectedItem(null);
-    setForm((current) => ({
+    setSubmitMode("close");
+    setForm({
       ...emptyForm,
-      audit_type:
-        auditTypeFilter !== "all"
-          ? auditTypeFilter
-          : auditTypeOptions[0] ?? current.audit_type,
-    }));
+      audit_type: auditTypeFilter !== "all" ? auditTypeFilter : "",
+    });
     setDrawerOpen(true);
     void loadCatalogs();
   };
@@ -274,6 +291,7 @@ export default function AuditDiscussionIssuesPage() {
   const openEditDrawer = (item: AuditDiscussionIssue) => {
     setDrawerMode("edit");
     setSelectedItem(item);
+    setSubmitMode("close");
     setForm(buildFormFromItem(item));
     setDrawerOpen(true);
     void loadCatalogs();
@@ -332,15 +350,32 @@ export default function AuditDiscussionIssuesPage() {
     setMessage(null);
 
     try {
-      const successText =
-        drawerMode === "create"
-          ? "Audit Discussion Issue record created successfully."
-          : "Audit Discussion Issue record updated successfully.";
-
       if (drawerMode === "create") {
         await createAuditDiscussionIssue(buildPayload(form));
+
+        if (submitMode === "another") {
+          setForm((current) => ({
+            ...emptyForm,
+            audit_type: current.audit_type,
+          }));
+          await loadAuditDiscussionIssues();
+          setMessage({
+            type: "success",
+            text: "Audit Discussion Issue created successfully. You can add another.",
+          });
+          return;
+        }
+
+        setMessage({
+          type: "success",
+          text: "Audit Discussion Issue created successfully.",
+        });
       } else if (selectedItem) {
         await updateAuditDiscussionIssue(selectedItem.issue_id, buildPayload(form));
+        setMessage({
+          type: "success",
+          text: "Audit Discussion Issue updated successfully.",
+        });
       }
 
       setDrawerOpen(false);
@@ -348,8 +383,6 @@ export default function AuditDiscussionIssuesPage() {
       setForm(emptyForm);
 
       await loadAuditDiscussionIssues();
-
-      setMessage({ type: "success", text: successText });
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -678,18 +711,36 @@ export default function AuditDiscussionIssuesPage() {
               Cancel
             </button>
 
+            {drawerMode === "create" ? (
+              <button
+                type="submit"
+                form="audit-discussion-issue-form"
+                disabled={submitLoading}
+                onClick={() => setSubmitMode("another")}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submitLoading && submitMode === "another" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                Save & Add Another
+              </button>
+            ) : null}
+
             <button
               type="submit"
               form="audit-discussion-issue-form"
               disabled={submitLoading}
+              onClick={() => setSubmitMode("close")}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitLoading ? (
+              {submitLoading && submitMode === "close" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <MessagesSquare className="h-4 w-4" />
               )}
-              {drawerMode === "create" ? "Create" : "Update"}
+              {drawerMode === "create" ? "Save & Close" : "Update"}
             </button>
           </>
         }
@@ -707,10 +758,7 @@ export default function AuditDiscussionIssuesPage() {
                 value: "",
                 label: catalogLoading ? "Loading Audit Types..." : "Select Audit Type",
               },
-              ...auditTypeOptions.map((auditType) => ({
-                value: auditType,
-                label: auditType,
-              })),
+              ...auditTypeSelectOptions,
             ]}
             onChange={(value) =>
               setForm((current) => ({ ...current, audit_type: value }))
