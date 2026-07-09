@@ -552,14 +552,30 @@ export default function EntranceMeetingMinutesPage() {
               </p>
             </div>
 
-            {showTopActions && minuteActions.canCreate ? (
-              <button
-                onClick={openCreateDrawer}
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-blue-50"
-              >
-                <Plus size={18} />
-                Create
-              </button>
+            {showTopActions ? (
+              <div className="flex flex-wrap gap-2">
+                {minuteActions.canCreate ? (
+                  <button
+                    onClick={openCreateDrawer}
+                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-slate-950 shadow-sm transition hover:bg-blue-50"
+                  >
+                    <Plus size={18} />
+                    Create
+                  </button>
+                ) : null}
+
+                {minuteActions.canExport ? (
+                  <button className="rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">
+                    Export
+                  </button>
+                ) : null}
+
+                {minuteActions.canImport ? (
+                  <button className="rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">
+                    Import
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>
