@@ -25,13 +25,13 @@ class EntranceMeetingMinuteRepository:
                     coalesce(
                         emp.employee_name,
                         ec.contact_name,
-                        atm.emp_id,
+                        atm.emp_id::text,
                         'Participant #' || mp.participant_id::text
                     ) as participant_name,
                     coalesce(atm.team_member_role, ec.designation) as designation
                 from meeting_participants mp
                 left join audit_team_members atm on atm.team_member_id = mp.audit_team_member_id
-                left join employees emp on emp.emp_id = atm.emp_id
+                left join employees emp on emp.id::text = atm.emp_id::text
                 left join audit_entity_contacts ec on ec.id = mp.entity_contact_id
                 where mp.participant_id = emn.chairman_participant_id
                 limit 1
@@ -346,7 +346,7 @@ class EntranceMeetingMinuteRepository:
                     coalesce(
                         emp.employee_name,
                         ec.contact_name,
-                        atm.emp_id,
+                        atm.emp_id::text,
                         'Participant #' || mp.participant_id::text
                     ) as participant_name,
                     coalesce(atm.team_member_role, ec.designation) as designation,
@@ -358,7 +358,7 @@ class EntranceMeetingMinuteRepository:
                     end as source_label
                 from meeting_participants mp
                 left join audit_team_members atm on atm.team_member_id = mp.audit_team_member_id
-                left join employees emp on emp.emp_id = atm.emp_id
+                left join employees emp on emp.id::text = atm.emp_id::text
                 left join audit_entity_contacts ec on ec.id = mp.entity_contact_id
                 where mp.meeting_id = :meeting_id
                   and mp.source_type = :source_type
