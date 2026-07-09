@@ -36,6 +36,7 @@ from app.api.v1.meeting_type import router as meeting_type_router
 from app.api.v1.meeting_master import router as meeting_master_router
 from app.api.v1.meeting_participants import router as meeting_participants_router
 from app.api.v1.meeting_reports import router as meeting_reports_router
+from app.api.v1.meeting_minute.entrance_meeting_minutes import router as entrance_meeting_minutes_router
 from app.api.v1.menu_action_permissions import router as menu_action_permissions_router
 from app.api.v1.menu_actions import router as menu_actions_router
 from app.api.v1.menu_permissions import router as menu_permissions_router
@@ -83,6 +84,7 @@ api_router.include_router(meeting_type_router)
 api_router.include_router(meeting_master_router)
 api_router.include_router(meeting_participants_router)
 api_router.include_router(meeting_reports_router)
+api_router.include_router(entrance_meeting_minutes_router)
 api_router.include_router(menu_action_permissions_router)
 api_router.include_router(menu_actions_router)
 api_router.include_router(menu_permissions_router)
