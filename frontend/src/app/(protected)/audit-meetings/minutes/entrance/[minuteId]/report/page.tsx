@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, Printer } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Download, Loader2, Printer } from "lucide-react";
 
 import {
   getEntranceMeetingMinuteReport,
@@ -24,14 +24,8 @@ function formatDate(value: string | null | undefined) {
     .replaceAll("/", ".");
 }
 
-function padRows<T>(items: T[], minimumRows = 4): (T | null)[] {
-  const rows: (T | null)[] = [...items];
-
-  while (rows.length < minimumRows) {
-    rows.push(null);
-  }
-
-  return rows;
+function safeText(value: string | null | undefined) {
+  return value?.trim() || "";
 }
 
 function findOffice(
@@ -53,13 +47,13 @@ function ParticipantTable({
 }: {
   participants: EntranceMeetingParticipantReportItem[];
 }) {
-  const rows = padRows(participants, 4);
+  const rows = participants;
 
   return (
     <table className="report-table">
       <thead>
         <tr>
-          <th className="w-14">Sl#</th>
+          <th className="sl-column">Sl#</th>
           <th>Name</th>
           <th>Designation</th>
           <th>Signature</th>
@@ -67,10 +61,10 @@ function ParticipantTable({
       </thead>
       <tbody>
         {rows.map((participant, index) => (
-          <tr key={`${participant?.participant_id ?? "blank"}-${index}`}>
-            <td>{index + 1}</td>
-            <td>{participant?.participant_name || ""}</td>
-            <td>{participant?.designation || ""}</td>
+          <tr key={participant.participant_id}>
+            <td className="text-center">{index + 1}</td>
+            <td>{safeText(participant.participant_name)}</td>
+            <td>{safeText(participant.designation)}</td>
             <td />
           </tr>
         ))}
@@ -81,8 +75,11 @@ function ParticipantTable({
 
 export default function EntranceMeetingMinuteReportPage() {
   const params = useParams<{ minuteId: string }>();
+  const reportRef = useRef<HTMLElement | null>(null);
+
   const [data, setData] = useState<EntranceMeetingMinuteReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const minuteId = Number(params.minuteId);
@@ -152,10 +149,74 @@ export default function EntranceMeetingMinuteReportPage() {
   }
 
   const minute = data.minute;
+  const clientName = safeText(minute.client_name) || safeText(minute.client_code);
   const briefingPerson =
-    data.client_participants[0]?.participant_name || minute.chairman_name || "";
-  const clientName = minute.client_name || minute.client_code || "";
+    safeText(data.client_participants[0]?.participant_name) ||
+    safeText(minute.chairman_name);
   const discussions = data.discussions;
+
+  const handleDownloadPdf = async () => {
+    if (!reportRef.current) return;
+
+    setPdfLoading(true);
+    setMessage(null);
+
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const element = reportRef.current;
+
+      const canvas = await html2canvas(element, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+        onclone: (clonedDocument) => {
+          clonedDocument
+            .querySelector(".a4-page")
+            ?.classList.add("pdf-capture-mode");
+        },
+      });
+
+      const imageData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imageHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      let heightLeft = imageHeight;
+      let position = 0;
+
+      pdf.addImage(imageData, "PNG", 0, position, pdfWidth, imageHeight);
+      heightLeft -= pdfHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imageHeight;
+        pdf.addPage();
+        pdf.addImage(imageData, "PNG", 0, position, pdfWidth, imageHeight);
+        heightLeft -= pdfHeight;
+      }
+
+      pdf.save(`entrance-meeting-minutes-${minute.minute_id}.pdf`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate Entrance Meeting Minutes PDF.",
+      );
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 py-6">
@@ -168,16 +229,37 @@ export default function EntranceMeetingMinuteReportPage() {
           Back
         </Link>
 
-        <button
-          onClick={() => window.print()}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
-        >
-          <Printer size={16} />
-          Print A4
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfLoading}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pdfLoading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Download size={16} />
+            )}
+            Download PDF
+          </button>
+
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            <Printer size={16} />
+            Print A4
+          </button>
+        </div>
       </div>
 
-      <main className="a4-page mx-auto bg-white text-black shadow-xl">
+      {message ? (
+        <div className="no-print mx-auto mb-4 w-[210mm] rounded-2xl border border-red-100 bg-white px-4 py-3 text-sm font-bold text-red-600 shadow-sm">
+          {message}
+        </div>
+      ) : null}
+
+      <main ref={reportRef} className="a4-page mx-auto bg-white text-black shadow-xl">
         <div className="report-content">
           <p className="firm-header">
             M Hannan Co., Chartered Accountants, Saj Bhaban, Unit# B, 27 Bijoy Nagar, Dhaka-1000
@@ -198,17 +280,19 @@ export default function EntranceMeetingMinuteReportPage() {
 
           <div className="program-row">
             <label>Name of Program:</label>
-            <strong>{minute.meeting_type || ""}</strong>
+            <span className="program-value">
+              {safeText(minute.meeting_type) || "Statutory Audit / Management Audit / Internal Audit"}
+            </span>
           </div>
 
           <div className="field-row">
             <label>Venue:</label>
-            <span className="value-box">{minute.meeting_venue || ""}</span>
+            <span className="value-box">{safeText(minute.meeting_venue)}</span>
           </div>
 
           <div className="field-row short-field">
             <label>Year of Audit:</label>
-            <span className="value-box">{minute.audit_year || ""}</span>
+            <span className="value-box">{safeText(minute.audit_year)}</span>
           </div>
 
           <h2>Participants from M Hannan &amp; Co.:</h2>
@@ -217,15 +301,11 @@ export default function EntranceMeetingMinuteReportPage() {
           <h2>Participants from Audit Client:</h2>
           <ParticipantTable participants={data.client_participants} />
 
-          <p className="paragraph">
-            In entrance meeting, <span className="inline-value">{briefingPerson}</span>{" "}
-            from <span className="inline-value">{clientName}</span>
-          </p>
-
-          <p className="paragraph">
-            brief the activities and objectives of the Entity, Project, accounting
-            system, audit planning, audit time schedule and determine the contact
-            person who will assist the auditor.
+          <p className="paragraph entrance-briefing">
+            In entrance meeting, <strong>{briefingPerson}</strong> from{" "}
+            <strong>{clientName}</strong> brief the activities and objectives of the
+            Entity, Project, accounting system, audit planning, audit time schedule
+            and determine the contact person who will assist the auditor.
           </p>
 
           <h2 className="underline-heading">Target Audit start and finishing date:</h2>
@@ -256,27 +336,25 @@ export default function EntranceMeetingMinuteReportPage() {
 
           <ol className="discussion-list">
             {discussions.length > 0 ? (
-              discussions.map((discussion) => (
-                <li key={discussion.id}>
-                  <span>{discussion.title}</span>
-                  {discussion.decision ? (
-                    <span> Decision: {discussion.decision}</span>
-                  ) : null}
-                </li>
-              ))
+              discussions.map((discussion) => {
+                const discussionText =
+                  safeText(discussion.description) || safeText(discussion.title);
+                const decisionText = safeText(discussion.decision);
+
+                return (
+                  <li key={discussion.id}>
+                    <span>{discussionText}</span>
+                    {decisionText ? <span> Decision: {decisionText}</span> : null}
+                  </li>
+                );
+              })
             ) : (
               <li>There is no other matter/agenda to be discussed in the meeting.</li>
             )}
           </ol>
 
-          {discussions.length > 0 ? (
-            <p className="paragraph">
-              There is no other matter/agenda to be discussed in the meeting.
-            </p>
-          ) : null}
-
           <div className="signature-block">
-            <strong>{minute.chairman_name || ""}</strong>
+            <strong>{safeText(minute.chairman_name)}</strong>
             <span>Chairman of the meeting</span>
           </div>
         </div>
@@ -285,11 +363,14 @@ export default function EntranceMeetingMinuteReportPage() {
       <style jsx global>{`
         @page {
           size: A4;
-          margin: 10mm;
+          margin: 0;
         }
 
         @media print {
+          html,
           body {
+            width: 210mm;
+            min-height: 297mm;
             background: white !important;
           }
 
@@ -298,14 +379,14 @@ export default function EntranceMeetingMinuteReportPage() {
           }
 
           .a4-page {
-            width: 190mm !important;
-            min-height: auto !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
             margin: 0 !important;
             box-shadow: none !important;
           }
 
           .report-content {
-            padding: 0 !important;
+            padding: 11mm 12mm !important;
           }
         }
 
@@ -314,16 +395,20 @@ export default function EntranceMeetingMinuteReportPage() {
           min-height: 297mm;
         }
 
+        .pdf-capture-mode {
+          box-shadow: none !important;
+        }
+
         .report-content {
-          padding: 12mm;
+          padding: 11mm 12mm;
           font-family: "Times New Roman", Times, serif;
-          font-size: 14px;
-          line-height: 1.28;
+          font-size: 13.5px;
+          line-height: 1.24;
         }
 
         .firm-header {
           font-size: 14px;
-          margin-bottom: 22mm;
+          margin: 0 0 20mm;
         }
 
         .title-row {
@@ -331,7 +416,7 @@ export default function EntranceMeetingMinuteReportPage() {
           align-items: flex-start;
           justify-content: space-between;
           gap: 12px;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
         }
 
         h1 {
@@ -342,9 +427,9 @@ export default function EntranceMeetingMinuteReportPage() {
         }
 
         h2 {
-          font-size: 16px;
+          font-size: 15.5px;
           font-weight: 700;
-          margin: 10px 0 4px;
+          margin: 8px 0 3px;
         }
 
         .underline-heading {
@@ -353,19 +438,20 @@ export default function EntranceMeetingMinuteReportPage() {
 
         .date-box-row {
           display: grid;
-          grid-template-columns: auto 54mm;
+          grid-template-columns: auto 49mm;
           align-items: center;
-          gap: 8px;
-          font-size: 16px;
+          gap: 6px;
+          font-size: 15px;
+          white-space: nowrap;
         }
 
         .field-row {
           display: grid;
-          grid-template-columns: 58mm 1fr;
+          grid-template-columns: 56mm 1fr;
           align-items: center;
           gap: 4px;
-          margin-bottom: 6px;
-          font-size: 16px;
+          margin-bottom: 5px;
+          font-size: 15.5px;
           font-weight: 700;
         }
 
@@ -377,19 +463,23 @@ export default function EntranceMeetingMinuteReportPage() {
         .program-row {
           display: flex;
           gap: 6px;
-          margin-bottom: 8px;
-          font-size: 16px;
+          margin-bottom: 6px;
+          font-size: 15.5px;
+        }
+
+        .program-value {
+          font-weight: 700;
         }
 
         .short-field {
-          grid-template-columns: 38mm 58mm;
+          grid-template-columns: 37mm 58mm;
         }
 
         .value-box {
           display: block;
-          min-height: 7mm;
+          min-height: 6.5mm;
           border: 1px solid #222;
-          padding: 3px 5px;
+          padding: 2px 5px;
           font-weight: 400;
         }
 
@@ -399,22 +489,22 @@ export default function EntranceMeetingMinuteReportPage() {
 
         .inline-value {
           display: inline-block;
-          min-width: 55mm;
+          min-width: 54mm;
           font-weight: 400;
         }
 
         .report-table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 8px;
-          font-size: 14px;
+          margin-bottom: 7px;
+          font-size: 13.5px;
         }
 
         .report-table th,
         .report-table td {
           border: 1px solid #222;
-          padding: 4px;
-          height: 8mm;
+          padding: 3px 4px;
+          height: 7.5mm;
           vertical-align: middle;
         }
 
@@ -423,53 +513,183 @@ export default function EntranceMeetingMinuteReportPage() {
           text-align: center;
         }
 
+        .sl-column {
+          width: 13mm;
+        }
+
+        .text-center {
+          text-align: center;
+        }
+
         .paragraph {
-          margin: 8px 0;
+          margin: 7px 0;
           text-align: justify;
-          font-size: 16px;
+          font-size: 15.5px;
         }
 
         .date-grid {
           display: grid;
-          grid-template-columns: 32mm 58mm 25mm 1fr;
+          grid-template-columns: 30mm 56mm 23mm 1fr;
           align-items: center;
-          gap: 6px;
-          margin-bottom: 8px;
-          font-size: 16px;
+          gap: 5px;
+          margin-bottom: 7px;
+          font-size: 15.5px;
         }
 
         .office-row {
           display: grid;
-          grid-template-columns: 38mm 1fr;
+          grid-template-columns: 37mm 1fr;
           align-items: center;
           gap: 4px;
           margin-bottom: 3px;
-          font-size: 16px;
+          font-size: 15.5px;
         }
 
         .discussion-list {
           margin: 0;
           padding-left: 18px;
-          font-size: 16px;
+          font-size: 15.5px;
           text-align: justify;
         }
 
         .discussion-list li {
-          margin-bottom: 5px;
+          margin-bottom: 4px;
         }
 
         .signature-block {
-          margin-top: 18mm;
+          margin-top: 16mm;
           margin-left: auto;
           width: 65mm;
           text-align: left;
-          font-size: 15px;
+          font-size: 14.5px;
         }
 
         .signature-block strong,
         .signature-block span {
           display: block;
         }
+
+        /* Refined A4 report design overrides */
+        .report-content {
+          padding: 10mm 12mm 9mm !important;
+          font-size: 13.2px !important;
+          line-height: 1.22 !important;
+        }
+
+        .firm-header {
+          margin: 0 0 9mm !important;
+          padding-bottom: 2.5mm !important;
+          border-bottom: 1.5px solid #111 !important;
+          text-align: center !important;
+          font-size: 14px !important;
+          font-weight: 600 !important;
+          letter-spacing: 0.1px !important;
+        }
+
+        .title-row {
+          align-items: flex-start !important;
+          margin-bottom: 4mm !important;
+        }
+
+        h1 {
+          font-size: 17px !important;
+          line-height: 1.18 !important;
+        }
+
+        h2 {
+          margin: 3.2mm 0 1.5mm !important;
+          font-size: 14.6px !important;
+          line-height: 1.15 !important;
+        }
+
+        .field-row {
+          margin-bottom: 2.5mm !important;
+          gap: 3mm !important;
+          font-size: 14.4px !important;
+        }
+
+        .program-row {
+          margin-bottom: 2.8mm !important;
+          font-size: 14.4px !important;
+        }
+
+        .value-box {
+          min-height: 6mm !important;
+          padding: 1.4px 5px !important;
+        }
+
+        .report-table {
+          margin-bottom: 3.2mm !important;
+          font-size: 12.9px !important;
+        }
+
+        .report-table th,
+        .report-table td {
+          padding-top: 1.6mm !important;
+          padding-bottom: 1.6mm !important;
+        }
+
+        .paragraph {
+          margin: 2.2mm 0 !important;
+          text-align: justify !important;
+        }
+
+        .entrance-briefing {
+          margin-top: 2.5mm !important;
+          margin-bottom: 3.2mm !important;
+          text-align: justify !important;
+        }
+
+        .entrance-briefing strong {
+          font-weight: 400 !important;
+        }
+
+        .date-grid {
+          margin: 1.5mm 0 3mm !important;
+        }
+
+        .office-row {
+          margin-bottom: 1.8mm !important;
+        }
+
+        .discussion-list {
+          margin: 1.5mm 0 5mm 0 !important;
+          padding-left: 9mm !important;
+          list-style-type: decimal !important;
+          list-style-position: outside !important;
+          font-size: 13.8px !important;
+          line-height: 1.28 !important;
+        }
+
+        .discussion-list li {
+          margin-bottom: 1.5mm !important;
+          padding-left: 1.5mm !important;
+          text-align: justify !important;
+        }
+
+        .discussion-list li::marker {
+          font-weight: 700 !important;
+        }
+
+        .signature-block {
+          margin-top: 13mm !important;
+          margin-right: 16mm !important;
+        }
+
+        @media print {
+          .report-content {
+            padding: 9mm 11mm 8mm !important;
+          }
+
+          .firm-header {
+            margin-bottom: 8mm !important;
+          }
+
+          .signature-block {
+            margin-top: 11mm !important;
+          }
+        }
+
       `}</style>
     </div>
   );
