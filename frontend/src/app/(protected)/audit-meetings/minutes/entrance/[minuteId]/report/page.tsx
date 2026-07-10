@@ -155,132 +155,288 @@ export default function EntranceMeetingMinuteReportPage() {
     safeText(minute.chairman_name);
   const discussions = data.discussions;
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadPdf = () => {
     if (!reportRef.current) return;
 
     setPdfLoading(true);
     setMessage(null);
 
-    let exportSource: HTMLElement | null = null;
+    const reportMarkup = reportRef.current.outerHTML;
+    const styles = Array.from(
+      document.querySelectorAll('style, link[rel="stylesheet"]'),
+    )
+      .map((node) => node.outerHTML)
+      .join("\n");
 
-    try {
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import("html2canvas"),
-        import("jspdf"),
-      ]);
+    const printWindow = window.open("", "_blank", "width=900,height=1200");
 
-      const page = reportRef.current;
-      exportSource =
-        (page.querySelector(".report-content") as HTMLElement | null) || page;
-
-      exportSource.classList.add("pdf-export-mode");
-
-      await new Promise((resolve) => window.setTimeout(resolve, 80));
-
-      const canvas = await html2canvas(exportSource, {
-        backgroundColor: "#ffffff",
-        scale: 2.25,
-        useCORS: true,
-        logging: false,
-        windowWidth: exportSource.scrollWidth,
-        windowHeight: exportSource.scrollHeight,
-      });
-
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-        compress: true,
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-
-      const margin = {
-        top: 10,
-        right: 12,
-        bottom: 10,
-        left: 12,
-      };
-
-      const usableWidth = pdfWidth - margin.left - margin.right;
-      const usableHeight = pdfHeight - margin.top - margin.bottom;
-
-      const pageSliceHeightPx = Math.floor(
-        (canvas.width * usableHeight) / usableWidth,
-      );
-
-      const minRemainingPx = Math.floor((canvas.width * 7) / usableWidth);
-
-      let sourceY = 0;
-      let pageIndex = 0;
-
-      while (sourceY < canvas.height) {
-        const remainingHeight = canvas.height - sourceY;
-
-        if (remainingHeight < minRemainingPx) {
-          break;
-        }
-
-        const sliceHeight = Math.min(pageSliceHeightPx, remainingHeight);
-
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = sliceHeight;
-
-        const context = pageCanvas.getContext("2d");
-
-        if (!context) {
-          throw new Error("Failed to prepare PDF canvas context.");
-        }
-
-        context.fillStyle = "#ffffff";
-        context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-        context.drawImage(
-          canvas,
-          0,
-          sourceY,
-          canvas.width,
-          sliceHeight,
-          0,
-          0,
-          canvas.width,
-          sliceHeight,
-        );
-
-        if (pageIndex > 0) {
-          pdf.addPage();
-        }
-
-        const imageHeight = (sliceHeight * usableWidth) / canvas.width;
-        const imageData = pageCanvas.toDataURL("image/png", 1);
-
-        pdf.addImage(
-          imageData,
-          "PNG",
-          margin.left,
-          margin.top,
-          usableWidth,
-          imageHeight,
-          undefined,
-          "FAST",
-        );
-
-        sourceY += sliceHeight;
-        pageIndex += 1;
-      }
-
-      pdf.save(`entrance-meeting-minutes-${minute.minute_id}.pdf`);
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to generate Entrance Meeting Minutes PDF.",
-      );
-    } finally {
-      exportSource?.classList.remove("pdf-export-mode");
+    if (!printWindow) {
       setPdfLoading(false);
+      setMessage("Please allow pop-ups to generate the PDF print preview.");
+      return;
     }
+
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Entrance Meeting Minutes ${minute.minute_id}</title>
+          ${styles}
+          <style>
+            @page {
+              size: A4;
+              margin: 10mm 11mm 10mm 11mm;
+            }
+
+            html,
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+              width: auto !important;
+              min-height: auto !important;
+              background: #ffffff !important;
+              overflow: visible !important;
+            }
+
+            body {
+              font-family: "Times New Roman", Times, serif !important;
+              color: #000000 !important;
+            }
+
+            body * {
+              visibility: visible !important;
+              box-sizing: border-box !important;
+            }
+
+            .no-print {
+              display: none !important;
+            }
+
+            .a4-page {
+              position: static !important;
+              width: auto !important;
+              min-width: 0 !important;
+              max-width: none !important;
+              min-height: auto !important;
+              height: auto !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              box-shadow: none !important;
+              background: #ffffff !important;
+              overflow: visible !important;
+            }
+
+            .report-content {
+              width: 100% !important;
+              min-height: auto !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              font-family: "Times New Roman", Times, serif !important;
+              font-size: 12.2px !important;
+              line-height: 1.17 !important;
+              color: #000000 !important;
+            }
+
+            .firm-header {
+              margin: 0 0 6.5mm !important;
+              padding-bottom: 2mm !important;
+              border-bottom: 1px solid #111 !important;
+              text-align: center !important;
+              font-size: 13.2px !important;
+              font-weight: 700 !important;
+              line-height: 1.1 !important;
+            }
+
+            .title-row {
+              display: grid !important;
+              grid-template-columns: 1fr 76mm !important;
+              align-items: start !important;
+              gap: 5mm !important;
+              margin-bottom: 3mm !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            h1 {
+              margin: 0 !important;
+              font-size: 15.2px !important;
+              line-height: 1.1 !important;
+              font-weight: 700 !important;
+              text-decoration: underline !important;
+            }
+
+            h2 {
+              margin: 2.4mm 0 1mm !important;
+              font-size: 12.9px !important;
+              line-height: 1.1 !important;
+              font-weight: 700 !important;
+              break-after: avoid !important;
+              page-break-after: avoid !important;
+            }
+
+            .date-box-row {
+              display: grid !important;
+              grid-template-columns: auto 42mm !important;
+              align-items: center !important;
+              gap: 2.5mm !important;
+              font-size: 12.8px !important;
+              white-space: nowrap !important;
+            }
+
+            .field-row {
+              display: grid !important;
+              grid-template-columns: 58mm 1fr !important;
+              align-items: center !important;
+              gap: 3mm !important;
+              margin-bottom: 1.8mm !important;
+              font-size: 12.8px !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .program-row {
+              display: flex !important;
+              gap: 2mm !important;
+              margin-bottom: 1.9mm !important;
+              font-size: 12.8px !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .short-field {
+              grid-template-columns: 38mm 60mm !important;
+            }
+
+            .value-box {
+              display: block !important;
+              min-height: 5.4mm !important;
+              height: auto !important;
+              border: 0.7px solid #111 !important;
+              padding: 1mm 1.6mm 0.8mm !important;
+              line-height: 1.13 !important;
+              font-weight: 400 !important;
+              overflow: visible !important;
+              box-decoration-break: clone !important;
+              -webkit-box-decoration-break: clone !important;
+            }
+
+            .small-box {
+              text-align: center !important;
+            }
+
+            .report-table {
+              width: 100% !important;
+              border-collapse: collapse !important;
+              margin-bottom: 2.4mm !important;
+              font-size: 11.6px !important;
+              line-height: 1.05 !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .report-table th,
+            .report-table td {
+              border: 0.7px solid #111 !important;
+              padding: 1.15mm 1.4mm !important;
+              vertical-align: middle !important;
+            }
+
+            .report-table th {
+              font-weight: 400 !important;
+              text-align: center !important;
+            }
+
+            .sl-column {
+              width: 12mm !important;
+            }
+
+            .paragraph,
+            .entrance-briefing {
+              margin: 2mm 0 2.2mm !important;
+              text-align: justify !important;
+              line-height: 1.18 !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .date-grid {
+              display: grid !important;
+              grid-template-columns: auto 48mm auto 48mm !important;
+              align-items: center !important;
+              gap: 2mm !important;
+              margin: 1.2mm 0 2.2mm !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .office-row {
+              display: grid !important;
+              grid-template-columns: 40mm 1fr !important;
+              align-items: center !important;
+              gap: 2mm !important;
+              margin-bottom: 1.2mm !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .discussion-list {
+              margin: 1.2mm 0 4mm 0 !important;
+              padding-left: 8mm !important;
+              list-style-type: decimal !important;
+              list-style-position: outside !important;
+              font-size: 11.9px !important;
+              line-height: 1.16 !important;
+            }
+
+            .discussion-list li {
+              margin-bottom: 1mm !important;
+              padding-left: 1mm !important;
+              text-align: justify !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .discussion-list li::marker {
+              font-weight: 700 !important;
+            }
+
+            .signature-block {
+              width: 62mm !important;
+              margin-top: 7mm !important;
+              margin-left: auto !important;
+              margin-right: 22mm !important;
+              margin-bottom: 0 !important;
+              font-size: 12.2px !important;
+              line-height: 1.12 !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+
+            .signature-block strong,
+            .signature-block span {
+              display: block !important;
+            }
+          </style>
+        </head>
+        <body>
+          ${reportMarkup}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+
+    printWindow.onafterprint = () => {
+      printWindow.close();
+      setPdfLoading(false);
+    };
+
+    window.setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      setPdfLoading(false);
+    }, 350);
   };
 
   return (
@@ -309,7 +465,7 @@ export default function EntranceMeetingMinuteReportPage() {
           </button>
 
           <button
-            onClick={() => window.print()}
+            onClick={handleDownloadPdf}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
           >
             <Printer size={16} />
@@ -850,6 +1006,225 @@ export default function EntranceMeetingMinuteReportPage() {
 
           .signature-block {
             margin-top: 11mm !important;
+          }
+        }
+
+
+        /* Expert native PDF/print layout */
+        @page {
+          size: A4;
+          margin: 11mm 11mm 10mm 11mm;
+        }
+
+        @media print {
+          html,
+          body {
+            width: auto !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .a4-page,
+          .a4-page * {
+            visibility: visible !important;
+          }
+
+          .a4-page {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+          }
+
+          .report-content {
+            width: 100% !important;
+            min-height: auto !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            font-family: "Times New Roman", Times, serif !important;
+            font-size: 12.2px !important;
+            line-height: 1.17 !important;
+            color: #000000 !important;
+          }
+
+          .firm-header {
+            margin: 0 0 6.5mm !important;
+            padding-bottom: 2mm !important;
+            border-bottom: 1px solid #111 !important;
+            text-align: center !important;
+            font-size: 13.2px !important;
+            font-weight: 700 !important;
+          }
+
+          .title-row {
+            display: grid !important;
+            grid-template-columns: 1fr 76mm !important;
+            align-items: start !important;
+            gap: 6mm !important;
+            margin-bottom: 3mm !important;
+            break-inside: avoid !important;
+          }
+
+          h1 {
+            font-size: 15.5px !important;
+            line-height: 1.1 !important;
+            margin: 0 !important;
+            text-decoration: underline !important;
+          }
+
+          h2 {
+            margin: 2.4mm 0 1mm !important;
+            font-size: 12.9px !important;
+            line-height: 1.1 !important;
+            break-after: avoid !important;
+          }
+
+          .date-box-row {
+            display: grid !important;
+            grid-template-columns: auto 42mm !important;
+            gap: 2.5mm !important;
+            align-items: center !important;
+            font-size: 12.8px !important;
+            white-space: nowrap !important;
+          }
+
+          .field-row {
+            display: grid !important;
+            grid-template-columns: 58mm 1fr !important;
+            align-items: center !important;
+            gap: 3mm !important;
+            margin-bottom: 1.8mm !important;
+            font-size: 12.8px !important;
+            break-inside: avoid !important;
+          }
+
+          .program-row {
+            display: flex !important;
+            gap: 2mm !important;
+            margin-bottom: 1.9mm !important;
+            font-size: 12.8px !important;
+            break-inside: avoid !important;
+          }
+
+          .short-field {
+            grid-template-columns: 38mm 60mm !important;
+          }
+
+          .value-box {
+            display: block !important;
+            min-height: 5.2mm !important;
+            height: auto !important;
+            border: 0.7px solid #111 !important;
+            padding: 1mm 1.5mm 0.7mm !important;
+            line-height: 1.12 !important;
+            box-sizing: border-box !important;
+            font-weight: 400 !important;
+            overflow: visible !important;
+          }
+
+          .small-box {
+            text-align: center !important;
+          }
+
+          .report-table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            margin-bottom: 2.4mm !important;
+            font-size: 11.6px !important;
+            line-height: 1.05 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          .report-table th,
+          .report-table td {
+            border: 0.7px solid #111 !important;
+            padding: 1.15mm 1.4mm !important;
+            vertical-align: middle !important;
+          }
+
+          .report-table th {
+            font-weight: 400 !important;
+            text-align: center !important;
+          }
+
+          .paragraph,
+          .entrance-briefing {
+            margin: 2mm 0 2.2mm !important;
+            text-align: justify !important;
+            line-height: 1.18 !important;
+            break-inside: avoid !important;
+          }
+
+          .date-grid {
+            display: grid !important;
+            grid-template-columns: auto 48mm auto 48mm !important;
+            align-items: center !important;
+            gap: 2mm !important;
+            margin: 1.2mm 0 2.2mm !important;
+            break-inside: avoid !important;
+          }
+
+          .office-row {
+            display: grid !important;
+            grid-template-columns: 40mm 1fr !important;
+            align-items: center !important;
+            gap: 2mm !important;
+            margin-bottom: 1.2mm !important;
+            break-inside: avoid !important;
+          }
+
+          .discussion-list {
+            margin: 1.2mm 0 4mm 0 !important;
+            padding-left: 8mm !important;
+            list-style-type: decimal !important;
+            list-style-position: outside !important;
+            font-size: 11.9px !important;
+            line-height: 1.16 !important;
+          }
+
+          .discussion-list li {
+            margin-bottom: 1mm !important;
+            padding-left: 1mm !important;
+            text-align: justify !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          .discussion-list li::marker {
+            font-weight: 700 !important;
+          }
+
+          .signature-block {
+            width: 62mm !important;
+            margin-top: 7mm !important;
+            margin-left: auto !important;
+            margin-right: 22mm !important;
+            margin-bottom: 0 !important;
+            font-size: 12.2px !important;
+            line-height: 1.12 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+
+          .signature-block strong,
+          .signature-block span {
+            display: block !important;
+          }
+
+          .no-print {
+            display: none !important;
           }
         }
 
