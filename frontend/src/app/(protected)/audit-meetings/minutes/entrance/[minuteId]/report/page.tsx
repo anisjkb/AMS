@@ -161,49 +161,113 @@ export default function EntranceMeetingMinuteReportPage() {
     setPdfLoading(true);
     setMessage(null);
 
+    let exportSource: HTMLElement | null = null;
+
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
         import("html2canvas"),
         import("jspdf"),
       ]);
 
-      const element = reportRef.current;
+      const page = reportRef.current;
+      exportSource =
+        (page.querySelector(".report-content") as HTMLElement | null) || page;
 
-      const canvas = await html2canvas(element, {
+      exportSource.classList.add("pdf-export-mode");
+
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+
+      const canvas = await html2canvas(exportSource, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        scale: 2.25,
         useCORS: true,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
-        onclone: (clonedDocument) => {
-          clonedDocument
-            .querySelector(".a4-page")
-            ?.classList.add("pdf-capture-mode");
-        },
+        logging: false,
+        windowWidth: exportSource.scrollWidth,
+        windowHeight: exportSource.scrollHeight,
       });
 
-      const imageData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
         format: "a4",
+        compress: true,
       });
 
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imageHeight = (canvas.height * pdfWidth) / canvas.width;
 
-      let heightLeft = imageHeight;
-      let position = 0;
+      const margin = {
+        top: 10,
+        right: 12,
+        bottom: 10,
+        left: 12,
+      };
 
-      pdf.addImage(imageData, "PNG", 0, position, pdfWidth, imageHeight);
-      heightLeft -= pdfHeight;
+      const usableWidth = pdfWidth - margin.left - margin.right;
+      const usableHeight = pdfHeight - margin.top - margin.bottom;
 
-      while (heightLeft > 0) {
-        position = heightLeft - imageHeight;
-        pdf.addPage();
-        pdf.addImage(imageData, "PNG", 0, position, pdfWidth, imageHeight);
-        heightLeft -= pdfHeight;
+      const pageSliceHeightPx = Math.floor(
+        (canvas.width * usableHeight) / usableWidth,
+      );
+
+      const minRemainingPx = Math.floor((canvas.width * 7) / usableWidth);
+
+      let sourceY = 0;
+      let pageIndex = 0;
+
+      while (sourceY < canvas.height) {
+        const remainingHeight = canvas.height - sourceY;
+
+        if (remainingHeight < minRemainingPx) {
+          break;
+        }
+
+        const sliceHeight = Math.min(pageSliceHeightPx, remainingHeight);
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeight;
+
+        const context = pageCanvas.getContext("2d");
+
+        if (!context) {
+          throw new Error("Failed to prepare PDF canvas context.");
+        }
+
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        context.drawImage(
+          canvas,
+          0,
+          sourceY,
+          canvas.width,
+          sliceHeight,
+          0,
+          0,
+          canvas.width,
+          sliceHeight,
+        );
+
+        if (pageIndex > 0) {
+          pdf.addPage();
+        }
+
+        const imageHeight = (sliceHeight * usableWidth) / canvas.width;
+        const imageData = pageCanvas.toDataURL("image/png", 1);
+
+        pdf.addImage(
+          imageData,
+          "PNG",
+          margin.left,
+          margin.top,
+          usableWidth,
+          imageHeight,
+          undefined,
+          "FAST",
+        );
+
+        sourceY += sliceHeight;
+        pageIndex += 1;
       }
 
       pdf.save(`entrance-meeting-minutes-${minute.minute_id}.pdf`);
@@ -214,6 +278,7 @@ export default function EntranceMeetingMinuteReportPage() {
           : "Failed to generate Entrance Meeting Minutes PDF.",
       );
     } finally {
+      exportSource?.classList.remove("pdf-export-mode");
       setPdfLoading(false);
     }
   };
@@ -567,6 +632,104 @@ export default function EntranceMeetingMinuteReportPage() {
         .signature-block strong,
         .signature-block span {
           display: block;
+        }
+
+        /* PDF export mode - controlled A4 margins and clean box alignment */
+        .report-content.pdf-export-mode {
+          width: 186mm !important;
+          min-height: auto !important;
+          padding: 0 !important;
+          box-sizing: border-box !important;
+          background: #ffffff !important;
+          font-size: 12.6px !important;
+          line-height: 1.18 !important;
+        }
+
+        .pdf-export-mode .firm-header {
+          margin-bottom: 7mm !important;
+        }
+
+        .pdf-export-mode h1 {
+          font-size: 16px !important;
+          line-height: 1.12 !important;
+        }
+
+        .pdf-export-mode h2 {
+          margin: 2.5mm 0 1.2mm !important;
+          font-size: 13.8px !important;
+        }
+
+        .pdf-export-mode .field-row {
+          margin-bottom: 2mm !important;
+          font-size: 13.6px !important;
+        }
+
+        .pdf-export-mode .program-row {
+          margin-bottom: 2.2mm !important;
+          font-size: 13.6px !important;
+        }
+
+        .pdf-export-mode .value-box {
+          display: flex !important;
+          align-items: center !important;
+          min-height: 5.8mm !important;
+          padding: 0 4.5px !important;
+          line-height: 1.05 !important;
+          box-sizing: border-box !important;
+        }
+
+        .pdf-export-mode .date-box-row {
+          grid-template-columns: auto 46mm !important;
+          font-size: 13.8px !important;
+        }
+
+        .pdf-export-mode .report-table {
+          margin-bottom: 2.6mm !important;
+          font-size: 12.2px !important;
+          line-height: 1.08 !important;
+        }
+
+        .pdf-export-mode .report-table th,
+        .pdf-export-mode .report-table td {
+          padding: 1.15mm 1.5mm !important;
+          vertical-align: middle !important;
+        }
+
+        .pdf-export-mode .paragraph,
+        .pdf-export-mode .entrance-briefing {
+          margin: 1.8mm 0 2.4mm !important;
+          text-align: justify !important;
+          line-height: 1.2 !important;
+        }
+
+        .pdf-export-mode .date-grid {
+          margin: 1.2mm 0 2.4mm !important;
+        }
+
+        .pdf-export-mode .office-row {
+          margin-bottom: 1.35mm !important;
+        }
+
+        .pdf-export-mode .discussion-list {
+          margin: 1.2mm 0 4mm 0 !important;
+          padding-left: 8mm !important;
+          list-style-type: decimal !important;
+          list-style-position: outside !important;
+          font-size: 12.8px !important;
+          line-height: 1.18 !important;
+        }
+
+        .pdf-export-mode .discussion-list li {
+          margin-bottom: 1.15mm !important;
+          padding-left: 1.2mm !important;
+          text-align: justify !important;
+        }
+
+        .pdf-export-mode .signature-block {
+          margin-top: 9mm !important;
+          margin-right: 14mm !important;
+          font-size: 13px !important;
+          line-height: 1.15 !important;
         }
 
         /* Refined A4 report design overrides */
