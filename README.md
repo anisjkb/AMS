@@ -2,6 +2,9 @@
 
 ## Overview
 
+PS E:\Audit\AMS\backend> .\.venv\Scripts\Activate.ps1
+(.venv) PS E:\Audit\AMS\backend> python -m uvicorn main:app --reload
+
 AMS (Audit Management System) is a modern enterprise-grade audit management platform built using:
 
 * FastAPI (Backend API)

@@ -385,7 +385,22 @@ class EntranceMeetingMinuteRepository:
             {"audit_type": audit_type},
         )
 
-        return [self._row_to_dict(row) for row in result.fetchall()]
+        rows = result.fetchall()
+
+        if not rows:
+            result = await self.db.execute(
+                text(
+                    """
+                    select id, title, description, decision
+                    from general_discussion
+                    where is_active = true
+                    order by id asc
+                    """
+                )
+            )
+            rows = result.fetchall()
+
+        return [self._row_to_dict(row) for row in rows]
 
     async def list_report_offices(self, client_id: int) -> list[dict[str, Any]]:
         result = await self.db.execute(
