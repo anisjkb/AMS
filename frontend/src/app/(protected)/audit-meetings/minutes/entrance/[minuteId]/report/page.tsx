@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Download, Loader2, Printer } from "lucide-react";
 
 import {
+  downloadEntranceMeetingMinuteServerPdf,
   getEntranceMeetingMinuteReport,
   type EntranceMeetingMinuteReport,
   type EntranceMeetingOfficeReportItem,
@@ -33,6 +34,7 @@ function findOffice(
   keyword: string,
   fallbackIndex: number,
 ) {
+
   return (
     offices.find((office) =>
       office.label?.toLowerCase().includes(keyword.toLowerCase()),
@@ -48,6 +50,7 @@ function ParticipantTable({
   participants: EntranceMeetingParticipantReportItem[];
 }) {
   const rows = participants;
+
 
   return (
     <table className="report-table">
@@ -80,6 +83,7 @@ export default function EntranceMeetingMinuteReportPage() {
   const [data, setData] = useState<EntranceMeetingMinuteReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [serverPdfLoading, setServerPdfLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const minuteId = Number(params.minuteId);
@@ -128,7 +132,8 @@ export default function EntranceMeetingMinuteReportPage() {
   const otherOffice = useMemo(() => findOffice(offices, "other", 2), [offices]);
 
   if (isLoading) {
-    return (
+
+  return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-600">
         <div className="flex items-center gap-3">
           <Loader2 className="animate-spin" />
@@ -139,7 +144,8 @@ export default function EntranceMeetingMinuteReportPage() {
   }
 
   if (message || !data) {
-    return (
+
+  return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
         <div className="rounded-2xl border border-red-100 bg-white p-6 text-red-600 shadow-sm">
           {message || "Report data not found."}
@@ -247,6 +253,8 @@ export default function EntranceMeetingMinuteReportPage() {
               font-size: 13.2px !important;
               font-weight: 700 !important;
               line-height: 1.1 !important;
+              break-after: avoid !important;
+              page-break-after: avoid !important;
             }
 
             .title-row {
@@ -283,6 +291,8 @@ export default function EntranceMeetingMinuteReportPage() {
               gap: 2.5mm !important;
               font-size: 12.8px !important;
               white-space: nowrap !important;
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
             }
 
             .field-row {
@@ -332,6 +342,19 @@ export default function EntranceMeetingMinuteReportPage() {
               margin-bottom: 2.4mm !important;
               font-size: 11.6px !important;
               line-height: 1.05 !important;
+              break-inside: auto !important;
+              page-break-inside: auto !important;
+            }
+
+            .report-table thead {
+              display: table-header-group !important;
+            }
+
+            .report-table tbody {
+              display: table-row-group !important;
+            }
+
+            .report-table tr {
               break-inside: avoid !important;
               page-break-inside: avoid !important;
             }
@@ -359,6 +382,8 @@ export default function EntranceMeetingMinuteReportPage() {
               line-height: 1.18 !important;
               break-inside: avoid !important;
               page-break-inside: avoid !important;
+              orphans: 3 !important;
+              widows: 3 !important;
             }
 
             .date-grid {
@@ -388,6 +413,8 @@ export default function EntranceMeetingMinuteReportPage() {
               list-style-position: outside !important;
               font-size: 11.9px !important;
               line-height: 1.16 !important;
+              break-inside: auto !important;
+              page-break-inside: auto !important;
             }
 
             .discussion-list li {
@@ -396,6 +423,8 @@ export default function EntranceMeetingMinuteReportPage() {
               text-align: justify !important;
               break-inside: avoid !important;
               page-break-inside: avoid !important;
+              orphans: 3 !important;
+              widows: 3 !important;
             }
 
             .discussion-list li::marker {
@@ -439,6 +468,24 @@ export default function EntranceMeetingMinuteReportPage() {
     }, 350);
   };
 
+
+  const handleServerPdf = async () => {
+    setServerPdfLoading(true);
+    setMessage(null);
+
+    try {
+      await downloadEntranceMeetingMinuteServerPdf(minute.minute_id);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate server PDF.",
+      );
+    } finally {
+      setServerPdfLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 py-6">
       <div className="no-print mx-auto mb-4 flex w-[210mm] items-center justify-between">
@@ -451,6 +498,19 @@ export default function EntranceMeetingMinuteReportPage() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleServerPdf}
+            disabled={serverPdfLoading}
+            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {serverPdfLoading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Download size={16} />
+            )}
+            Server PDF
+          </button>
+
           <button
             onClick={handleDownloadPdf}
             disabled={pdfLoading}
@@ -562,7 +622,8 @@ export default function EntranceMeetingMinuteReportPage() {
                   safeText(discussion.description) || safeText(discussion.title);
                 const decisionText = safeText(discussion.decision);
 
-                return (
+
+  return (
                   <li key={discussion.id}>
                     <span>{discussionText}</span>
                     {decisionText ? <span> Decision: {decisionText}</span> : null}

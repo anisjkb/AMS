@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.permissions import require_permission
@@ -66,6 +67,24 @@ async def get_entrance_meeting_minute_report(
 ):
     service = EntranceMeetingMinuteService(db)
     return await service.get_report(minute_id)
+
+
+@router.get("/{minute_id}/pdf")
+async def download_entrance_meeting_minute_pdf(
+    minute_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("menu.entrance_meeting_minutes.view")),
+):
+    service = EntranceMeetingMinuteService(db)
+    pdf_bytes = await service.generate_pdf(minute_id)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="entrance-meeting-minutes-{minute_id}.pdf"'
+        },
+    )
 
 
 @router.post(

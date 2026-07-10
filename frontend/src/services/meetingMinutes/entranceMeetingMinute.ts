@@ -200,3 +200,38 @@ export async function getEntranceMeetingMinuteReport(id: number) {
     },
   );
 }
+
+export async function downloadEntranceMeetingMinuteServerPdf(id: number) {
+  const response = await fetch(
+    `/api/backend/entrance-meeting-minutes/${id}/pdf`,
+    {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        Accept: "application/pdf",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    const message =
+      error?.detail ||
+      error?.message ||
+      "Entrance Meeting Minutes server PDF request failed.";
+
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `entrance-meeting-minutes-${id}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.URL.revokeObjectURL(url);
+}
