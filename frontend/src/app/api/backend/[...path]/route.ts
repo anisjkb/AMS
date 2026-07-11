@@ -62,10 +62,30 @@ async function proxyRequest(request: NextRequest, context: RouteContext) {
     });
   }
 
-  const text = await backendResponse.text();
+  const buffer = await backendResponse.arrayBuffer();
 
-  return new NextResponse(text, {
+  const responseHeaders = new Headers();
+
+  const responseDisposition =
+    backendResponse.headers.get("content-disposition");
+
+  if (responseContentType) {
+    responseHeaders.set(
+      "content-type",
+      responseContentType,
+    );
+  }
+
+  if (responseDisposition) {
+    responseHeaders.set(
+      "content-disposition",
+      responseDisposition,
+    );
+  }
+
+  return new NextResponse(buffer, {
     status: backendResponse.status,
+    headers: responseHeaders,
   });
 }
 
