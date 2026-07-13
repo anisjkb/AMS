@@ -21,12 +21,6 @@ class AuditVisitObservation(ActiveStatusMixin, AuditMixin, Base):
         nullable=True,
     )
 
-    audit_type: Mapped[str] = mapped_column(
-        String(50),
-        index=True,
-        nullable=False,
-    )
-
     discussion_point: Mapped[str] = mapped_column(
         String(100),
         index=True,

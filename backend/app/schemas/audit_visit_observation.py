@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class AuditVisitObservationBase(BaseModel):
     issue_id: int | None = Field(default=None, gt=0)
-    audit_type: str = Field(..., min_length=2, max_length=50)
     discussion_point: str = Field(..., min_length=2, max_length=255)
     observation_discussion: str = Field(..., min_length=2)
     observation_decision: str = Field(..., min_length=2)
@@ -16,7 +15,6 @@ class AuditVisitObservationBase(BaseModel):
     status: str = Field(default="active", min_length=2, max_length=20)
 
     @field_validator(
-        "audit_type",
         "discussion_point",
         "observation_discussion",
         "observation_decision",
@@ -45,7 +43,6 @@ class AuditVisitObservationCreate(AuditVisitObservationBase):
 
 class AuditVisitObservationUpdate(BaseModel):
     issue_id: int | None = Field(default=None, gt=0)
-    audit_type: str | None = Field(default=None, min_length=2, max_length=50)
     discussion_point: str | None = Field(default=None, min_length=2, max_length=255)
     observation_discussion: str | None = Field(default=None, min_length=2)
     observation_decision: str | None = Field(default=None, min_length=2)
@@ -57,7 +54,6 @@ class AuditVisitObservationUpdate(BaseModel):
     is_active: bool | None = None
 
     @field_validator(
-        "audit_type",
         "discussion_point",
         "observation_discussion",
         "observation_decision",
@@ -88,7 +84,6 @@ class AuditVisitObservationResponse(BaseModel):
 
     visit_observation_id: int
     issue_id: int | None = None
-    audit_type: str
     discussion_point: str
     observation_discussion: str
     observation_decision: str

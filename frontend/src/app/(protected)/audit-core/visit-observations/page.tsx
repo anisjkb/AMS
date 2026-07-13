@@ -55,7 +55,6 @@ type PageMessage = {
 
 type FormState = {
   issue_id: string;
-  audit_type: string;
   discussion_point: string;
   observation_discussion: string;
   observation_decision: string;
@@ -68,7 +67,6 @@ type FormState = {
 
 const emptyForm: FormState = {
   issue_id: "",
-  audit_type: "",
   discussion_point: "",
   observation_discussion: "",
   observation_decision: "",
@@ -122,13 +120,12 @@ function buildVisitLabel(visit: AuditVisitInfo) {
 }
 
 function buildIssueLabel(issue: AuditDiscussionIssue) {
-  return `${issue.discussion_point} (${issue.audit_type})`;
+  return issue.discussion_point;
 }
 
 function buildFormFromItem(item: AuditVisitObservation): FormState {
   return {
     issue_id: item.issue_id ? String(item.issue_id) : "",
-    audit_type: item.audit_type,
     discussion_point: item.discussion_point,
     observation_discussion: item.observation_discussion,
     observation_decision: item.observation_decision,
@@ -149,7 +146,6 @@ function optionalNumber(value: string) {
 function buildPayload(form: FormState): AuditVisitObservationPayload {
   return {
     issue_id: optionalNumber(form.issue_id),
-    audit_type: form.audit_type.trim(),
     discussion_point: form.discussion_point.trim(),
     observation_discussion: form.observation_discussion.trim(),
     observation_decision: form.observation_decision.trim(),
@@ -173,7 +169,6 @@ export default function AuditVisitObservationsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [visitFilter, setVisitFilter] = useState("all");
-  const [auditTypeFilter, setAuditTypeFilter] = useState("all");
 
   const [visitOptions, setVisitOptions] = useState<AuditVisitInfo[]>([]);
   const [issueOptions, setIssueOptions] = useState<AuditDiscussionIssue[]>([]);
@@ -222,12 +217,6 @@ export default function AuditVisitObservationsPage() {
     return Number.parseInt(visitFilter, 10);
   }, [visitFilter]);
 
-  const selectedAuditTypeFilter = useMemo(() => {
-    if (auditTypeFilter === "all") return undefined;
-
-    return auditTypeFilter;
-  }, [auditTypeFilter]);
-
   const visitMap = useMemo(() => {
     return new Map(visitOptions.map((visit) => [visit.visit_id, visit]));
   }, [visitOptions]);
@@ -236,17 +225,9 @@ export default function AuditVisitObservationsPage() {
     return new Map(issueOptions.map((issue) => [issue.issue_id, issue]));
   }, [issueOptions]);
 
-  const auditTypeOptions = useMemo(() => {
-    return Array.from(
-      new Set(issueOptions.map((issue) => issue.audit_type).filter(Boolean)),
-    ).sort((first, second) => first.localeCompare(second));
-  }, [issueOptions]);
-
   const filteredIssueOptions = useMemo(() => {
-    if (!form.audit_type) return issueOptions;
-
-    return issueOptions.filter((issue) => issue.audit_type === form.audit_type);
-  }, [form.audit_type, issueOptions]);
+    return issueOptions;
+  }, [issueOptions]);
 
   const showTopActions = visitObservationActions.showTopActions;
   const showRowActions = visitObservationActions.showRowActions;
@@ -263,7 +244,6 @@ export default function AuditVisitObservationsPage() {
         search: debouncedSearch,
         isActive: isActiveFilter,
         visitId: selectedVisitFilter,
-        auditType: selectedAuditTypeFilter,
       });
 
       setItems(response.items);
@@ -285,7 +265,6 @@ export default function AuditVisitObservationsPage() {
     isActiveFilter,
     numericPageSize,
     page,
-    selectedAuditTypeFilter,
     selectedVisitFilter,
   ]);
 
@@ -364,7 +343,6 @@ export default function AuditVisitObservationsPage() {
     setForm((current) => ({
       ...current,
       issue_id: issueId,
-      audit_type: issue?.audit_type ?? current.audit_type,
       discussion_point: issue?.discussion_point ?? current.discussion_point,
       observation_decision:
         issue?.default_decision ?? current.observation_decision,
@@ -383,7 +361,6 @@ export default function AuditVisitObservationsPage() {
       audit_id: firstVisit ? String(firstVisit.audit_id) : "",
       team_id: firstVisit ? String(firstVisit.team_id) : "",
       issue_id: firstIssue ? String(firstIssue.issue_id) : "",
-      audit_type: firstIssue?.audit_type ?? "",
       discussion_point: firstIssue?.discussion_point ?? "",
       observation_decision: firstIssue?.default_decision ?? "",
     });
@@ -427,11 +404,6 @@ export default function AuditVisitObservationsPage() {
 
     if (!form.issue_id.trim()) {
       setMessage({ type: "error", text: "Discussion Issue is required." });
-      return false;
-    }
-
-    if (!form.audit_type.trim()) {
-      setMessage({ type: "error", text: "Audit Type is required." });
       return false;
     }
 
@@ -602,7 +574,6 @@ export default function AuditVisitObservationsPage() {
             setSearch("");
             setStatusFilter("all");
             setVisitFilter("all");
-            setAuditTypeFilter("all");
             setPageSize(DEFAULT_CRUD_PAGE_SIZE);
             resetToFirstPage();
           }}
@@ -632,23 +603,6 @@ export default function AuditVisitObservationsPage() {
               ],
               onChange: (value) => {
                 setVisitFilter(value);
-                resetToFirstPage();
-              },
-            },
-            {
-              key: "auditType",
-              label: "Audit Type",
-              type: "select",
-              value: auditTypeFilter,
-              options: [
-                { value: "all", label: "All Audit Types" },
-                ...auditTypeOptions.map((auditType) => ({
-                  value: auditType,
-                  label: auditType,
-                })),
-              ],
-              onChange: (value) => {
-                setAuditTypeFilter(value);
                 resetToFirstPage();
               },
             },
@@ -750,7 +704,7 @@ export default function AuditVisitObservationsPage() {
                               : "-"}
                         </td>
                         <td className="px-5 py-4">
-                          <CrudPillBadge>{item.audit_type}</CrudPillBadge>
+
                         </td>
                         <td className="px-5 py-4 text-sm font-bold text-slate-700">
                           {item.discussion_point}
@@ -935,27 +889,6 @@ export default function AuditVisitObservationsPage() {
           />
 
           <div className="grid gap-4 md:grid-cols-2">
-            <CrudSelectField
-              label="Audit Type"
-              value={form.audit_type}
-              options={[
-                { value: "", label: "Select Audit Type" },
-                ...auditTypeOptions.map((auditType) => ({
-                  value: auditType,
-                  label: auditType,
-                })),
-              ]}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  audit_type: value,
-                  issue_id: "",
-                  discussion_point: "",
-                  observation_decision: "",
-                }))
-              }
-            />
-
             <CrudSelectField
               label="Status"
               value={form.status}

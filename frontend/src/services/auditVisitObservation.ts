@@ -1,7 +1,6 @@
 export type AuditVisitObservation = {
   visit_observation_id: number;
   issue_id: number | null;
-  audit_type: string;
   discussion_point: string;
   observation_discussion: string;
   observation_decision: string;
@@ -26,7 +25,6 @@ export type AuditVisitObservationListResponse = {
 
 export type AuditVisitObservationPayload = {
   issue_id?: number | null;
-  audit_type: string;
   discussion_point: string;
   observation_discussion: string;
   observation_decision: string;
@@ -51,7 +49,6 @@ type ListParams = {
   visitId?: number;
   auditId?: number;
   teamId?: number;
-  auditType?: string;
   status?: string;
 };
 
@@ -73,7 +70,6 @@ function buildQuery(params: ListParams) {
   if (params.visitId) query.set("visit_id", String(params.visitId));
   if (params.auditId) query.set("audit_id", String(params.auditId));
   if (params.teamId) query.set("team_id", String(params.teamId));
-  if (params.auditType) query.set("audit_type", params.auditType);
   if (params.status) query.set("status", params.status);
 
   return query.toString();

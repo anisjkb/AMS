@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AuditVisitInfoBase(BaseModel):
+    visit_name: str | None = Field(default=None, max_length=150)
     audit_id: int = Field(..., gt=0)
     team_id: int = Field(..., gt=0)
     client_address_id: int = Field(..., gt=0)
@@ -24,6 +25,7 @@ class AuditVisitInfoCreate(AuditVisitInfoBase):
 
 
 class AuditVisitInfoUpdate(BaseModel):
+    visit_name: str | None = Field(default=None, max_length=150)
     audit_id: int | None = Field(default=None, gt=0)
     team_id: int | None = Field(default=None, gt=0)
     client_address_id: int | None = Field(default=None, gt=0)
@@ -47,6 +49,7 @@ class AuditVisitInfoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     visit_id: int
+    visit_name: str | None = None
     audit_id: int
     team_id: int
     client_address_id: int

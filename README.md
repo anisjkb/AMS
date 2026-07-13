@@ -1,5 +1,9 @@
 # AMS (Audit Management System)
 
+## Preferred workflow:
+
+- Inspect → safe PowerShell patch → compile/lint/build → browser test → commit → push
+
 ## Overview
 
 PS E:\Audit\AMS\backend> .\.venv\Scripts\Activate.ps1

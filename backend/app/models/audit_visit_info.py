@@ -16,6 +16,11 @@ class AuditVisitInfo(ActiveStatusMixin, AuditMixin, Base):
         autoincrement=True,
     )
 
+    visit_name: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
     audit_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("audit_master.audit_id", ondelete="RESTRICT"),

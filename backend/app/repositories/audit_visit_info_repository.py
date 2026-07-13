@@ -26,6 +26,7 @@ class AuditVisitInfoRepository:
             filters.append(
                 or_(
                     cast(AuditVisitInfo.visit_id, String).ilike(search_term),
+                    AuditVisitInfo.visit_name.ilike(search_term),
                     cast(AuditVisitInfo.audit_id, String).ilike(search_term),
                     cast(AuditVisitInfo.team_id, String).ilike(search_term),
                     cast(AuditVisitInfo.client_address_id, String).ilike(search_term),
@@ -51,6 +52,7 @@ class AuditVisitInfoRepository:
     def _sort_column(self, sort_by: str):
         allowed_sort_columns = {
             "visit_id": AuditVisitInfo.visit_id,
+            "visit_name": AuditVisitInfo.visit_name,
             "audit_id": AuditVisitInfo.audit_id,
             "team_id": AuditVisitInfo.team_id,
             "client_address_id": AuditVisitInfo.client_address_id,

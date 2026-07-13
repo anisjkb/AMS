@@ -26,7 +26,6 @@ class AuditVisitObservationService:
         visit_id: int | None,
         audit_id: int | None,
         team_id: int | None,
-        audit_type: str | None,
         status_filter: str | None,
         sort_by: str,
         sort_order: str,
@@ -40,7 +39,6 @@ class AuditVisitObservationService:
             visit_id=visit_id,
             audit_id=audit_id,
             team_id=team_id,
-            audit_type=audit_type,
             status=status_filter,
             sort_by=sort_by,
             sort_order=sort_order,
@@ -113,7 +111,6 @@ class AuditVisitObservationService:
         issue_id = normalized.get("issue_id")
         if issue_id is not None:
             issue = await self._get_valid_issue(issue_id)
-            normalized["audit_type"] = issue.audit_type
             normalized["discussion_point"] = issue.discussion_point
 
         visit_id = normalized.get("visit_id")
@@ -166,7 +163,6 @@ class AuditVisitObservationService:
 
         merged_data = {
             "issue_id": item.issue_id,
-            "audit_type": item.audit_type,
             "discussion_point": item.discussion_point,
             "observation_discussion": item.observation_discussion,
             "observation_decision": item.observation_decision,

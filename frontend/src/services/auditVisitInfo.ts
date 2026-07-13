@@ -1,5 +1,6 @@
 export type AuditVisitInfo = {
   visit_id: number;
+  visit_name: string | null;
   audit_id: number;
   team_id: number;
   client_address_id: number;
@@ -20,6 +21,7 @@ export type AuditVisitInfoListResponse = {
 };
 
 export type AuditVisitInfoPayload = {
+  visit_name: string | null;
   audit_id: number;
   team_id: number;
   client_address_id: number;

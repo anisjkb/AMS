@@ -21,7 +21,6 @@ class AuditVisitObservationRepository:
         visit_id: int | None,
         audit_id: int | None,
         team_id: int | None,
-        audit_type: str | None,
         status: str | None,
     ):
         filters = []
@@ -35,7 +34,6 @@ class AuditVisitObservationRepository:
                         String,
                     ).ilike(search_term),
                     cast(AuditVisitObservation.issue_id, String).ilike(search_term),
-                    AuditVisitObservation.audit_type.ilike(search_term),
                     AuditVisitObservation.discussion_point.ilike(search_term),
                     AuditVisitObservation.observation_discussion.ilike(search_term),
                     AuditVisitObservation.observation_decision.ilike(search_term),
@@ -59,9 +57,6 @@ class AuditVisitObservationRepository:
         if team_id is not None:
             filters.append(AuditVisitObservation.team_id == team_id)
 
-        if audit_type:
-            filters.append(AuditVisitObservation.audit_type == audit_type)
-
         if status:
             filters.append(AuditVisitObservation.status == status)
 
@@ -74,7 +69,6 @@ class AuditVisitObservationRepository:
             "visit_id": AuditVisitObservation.visit_id,
             "audit_id": AuditVisitObservation.audit_id,
             "team_id": AuditVisitObservation.team_id,
-            "audit_type": AuditVisitObservation.audit_type,
             "discussion_point": AuditVisitObservation.discussion_point,
             "status": AuditVisitObservation.status,
             "created_at": AuditVisitObservation.created_at,
@@ -96,7 +90,6 @@ class AuditVisitObservationRepository:
         visit_id: int | None,
         audit_id: int | None,
         team_id: int | None,
-        audit_type: str | None,
         status: str | None,
         sort_by: str,
         sort_order: str,
@@ -108,7 +101,6 @@ class AuditVisitObservationRepository:
             visit_id=visit_id,
             audit_id=audit_id,
             team_id=team_id,
-            audit_type=audit_type,
             status=status,
         )
 
