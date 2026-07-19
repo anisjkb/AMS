@@ -205,6 +205,9 @@ export default function AuditVisitInfoPage() {
   const [selectedFinding, setSelectedFinding] =
     useState<AuditVisitObservation | null>(null);
 
+  const [findingError, setFindingError] =
+    useState<string | null>(null);
+
   const [findingForm, setFindingForm] = useState({
     discussion_point: "",
     observation_discussion: "",
@@ -316,6 +319,7 @@ export default function AuditVisitInfoPage() {
   }, [debouncedSearch, isActiveFilter, numericPageSize, page]);
 
   const openAddFinding = () => {
+    setFindingError(null);
     setFindingDrawerMode("create");
     setSelectedFinding(null);
 
@@ -333,6 +337,7 @@ export default function AuditVisitInfoPage() {
   const openEditFinding = (
     finding: AuditVisitObservation,
   ) => {
+    setFindingError(null);
     setSelectedFinding(finding);
 
     setFindingForm({
@@ -364,6 +369,21 @@ export default function AuditVisitInfoPage() {
 
   const saveFinding = async (closeAfterSave: boolean) => {
     if (!selectedVisit) return;
+
+    if (findingForm.discussion_point.trim().length < 2) {
+      setFindingError("Discussion Point is required.");
+      return;
+    }
+
+    if (findingForm.observation_discussion.trim().length < 2) {
+      setFindingError("Finding is required.");
+      return;
+    }
+
+    if (findingForm.observation_decision.trim().length < 2) {
+      setFindingError("Decision is required.");
+      return;
+    }
 
     setFindingSubmitLoading(true);
 
@@ -1330,6 +1350,12 @@ export default function AuditVisitInfoPage() {
                 : "-"}
             </p>
           </div>
+
+          {findingError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {findingError}
+            </div>
+          ) : null}
 
           <CrudTextField
             ref={discussionPointRef}

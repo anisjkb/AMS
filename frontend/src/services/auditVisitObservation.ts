@@ -91,10 +91,15 @@ async function requestJson<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
+
     const message =
-      error?.detail ||
-      error?.message ||
-      "Audit Visit Observation request failed.";
+      Array.isArray(error?.detail)
+        ? error.detail
+            .map((item: { msg?: string }) => item.msg ?? JSON.stringify(item))
+            .join(", ")
+        : error?.detail ||
+          error?.message ||
+          "Audit Visit Observation request failed.";
 
     throw new Error(message);
   }
