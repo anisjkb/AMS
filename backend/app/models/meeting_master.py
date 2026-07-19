@@ -35,6 +35,13 @@ class MeetingMaster(ActiveStatusMixin, AuditMixin, Base):
         nullable=False,
     )
 
+    audit_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("audit_master.audit_id", ondelete="RESTRICT"),
+        index=True,
+        nullable=True,
+    )
+
     client_id: Mapped[int] = mapped_column(
         BigInteger,
         index=True,

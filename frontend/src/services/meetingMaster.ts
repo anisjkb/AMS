@@ -3,6 +3,7 @@ export type MeetingMaster = {
   meeting_name: string;
   meeting_type_id: number;
   meeting_type: string;
+  audit_id: number | null;
   client_id: number;
   client_code: string;
   audit_year: string;
@@ -30,6 +31,7 @@ export type MeetingMasterPayload = {
   meeting_name: string;
   meeting_type_id: number;
   meeting_type: string;
+  audit_id: number;
   client_id: number;
   client_code: string;
   audit_year: string;

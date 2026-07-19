@@ -36,6 +36,7 @@ import {
   type MeetingMasterPayload,
 } from "@/services/meetingMaster";
 import { listAuditEntities, type AuditEntity } from "@/services/auditEntity";
+import { listAuditMaster, type AuditMaster } from "@/services/auditMaster";
 import { listMeetingTypes, type MeetingType } from "@/services/meetingType";
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -64,6 +65,7 @@ type FormState = {
   meeting_name: string;
   meeting_type_id: string;
   meeting_type: string;
+  audit_id: string;
   entity_type: string;
   client_id: string;
   client_code: string;
@@ -80,6 +82,7 @@ const emptyForm: FormState = {
   meeting_name: "",
   meeting_type_id: "",
   meeting_type: "",
+  audit_id: "",
   entity_type: "",
   client_id: "",
   client_code: "",
@@ -126,6 +129,7 @@ function buildFormFromItem(item: MeetingMaster): FormState {
     meeting_name: item.meeting_name,
     meeting_type_id: String(item.meeting_type_id),
     meeting_type: item.meeting_type,
+    audit_id: item.audit_id ? String(item.audit_id) : "",
     entity_type: "",
     client_id: String(item.client_id),
     client_code: item.client_code,
@@ -144,6 +148,7 @@ function buildPayload(form: FormState): MeetingMasterPayload {
     meeting_name: form.meeting_name.trim(),
     meeting_type_id: Number.parseInt(form.meeting_type_id, 10),
     meeting_type: form.meeting_type.trim(),
+    audit_id: Number.parseInt(form.audit_id, 10),
     client_id: Number.parseInt(form.client_id, 10),
     client_code: form.client_code.trim(),
     audit_year: form.audit_year.trim(),
@@ -162,6 +167,8 @@ export default function MeetingMasterPage() {
   const [items, setItems] = useState<MeetingMaster[]>([]);
   const [meetingTypes, setMeetingTypes] = useState<MeetingType[]>([]);
   const [meetingTypeLoading, setMeetingTypeLoading] = useState(false);
+  const [auditMasters, setAuditMasters] = useState<AuditMaster[]>([]);
+  const [auditMasterLoading, setAuditMasterLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] =
     useState<CrudPageSizeOption>(DEFAULT_CRUD_PAGE_SIZE);
@@ -299,6 +306,44 @@ const debouncedSearch = useDebouncedValue(search, 400);
     }
   }, []);
 
+  const loadAuditMasters = useCallback(async (clientId: string) => {
+    const parsedClientId = Number.parseInt(clientId, 10);
+
+    if (
+      !clientId ||
+      Number.isNaN(parsedClientId) ||
+      parsedClientId <= 0
+    ) {
+      setAuditMasters([]);
+      return;
+    }
+
+    setAuditMasterLoading(true);
+
+    try {
+      const response = await listAuditMaster({
+        page: 1,
+        pageSize: 100,
+        isActive: true,
+        clientId: parsedClientId,
+      });
+
+      setAuditMasters(response.items);
+    } catch (error) {
+      setAuditMasters([]);
+
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to load Audit Master records.",
+      });
+    } finally {
+      setAuditMasterLoading(false);
+    }
+  }, []);
+
   const hydrateSelectedEntityForEdit = useCallback(
     async (item: MeetingMaster) => {
       try {
@@ -361,6 +406,21 @@ const debouncedSearch = useDebouncedValue(search, 400);
       window.clearTimeout(timerId);
     };
   }, [drawerOpen, form.entity_type, loadEntityOptions]);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      if (!drawerOpen || !form.client_id) {
+        setAuditMasters([]);
+        return;
+      }
+
+      void loadAuditMasters(form.client_id);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [drawerOpen, form.client_id, loadAuditMasters]);
 
   const loadMeetingMaster = useCallback(async () => {
     setIsLoading(true);
@@ -468,6 +528,7 @@ const openCreateDrawer = () => {
       ["entity_type", "Entity type is required."],
       ["client_id", "Client / Entity is required."],
       ["client_code", "Client / Entity code is required."],
+      ["audit_id", "Audit Master is required."],
       ["audit_year", "Audit year is required."],
       ["meeting_date", "Meeting date is required."],
       ["audit_start_date", "Audit start date is required."],
@@ -484,7 +545,18 @@ const openCreateDrawer = () => {
       }
     }
 
+    const auditId = Number.parseInt(form.audit_id, 10);
+
+    if (Number.isNaN(auditId) || auditId <= 0) {
+      setMessage({
+        type: "error",
+        text: "Audit Master must be a valid selection.",
+      });
+      return false;
+    }
+
     const clientId = Number.parseInt(form.client_id, 10);
+
     if (Number.isNaN(clientId) || clientId <= 0) {
       setMessage({ type: "error", text: "Client ID must be a valid positive number." });
       return false;
@@ -521,6 +593,7 @@ const openCreateDrawer = () => {
             entity_type: current.entity_type,
             client_id: current.client_id,
             client_code: current.client_code,
+            audit_id: current.audit_id,
             audit_year: current.audit_year,
             audit_start_date: current.audit_start_date,
             audit_end_date: current.audit_end_date,
@@ -1009,7 +1082,7 @@ const openCreateDrawer = () => {
             />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <CrudSelectField
               label="Entity Type"
               value={form.entity_type}
@@ -1026,6 +1099,10 @@ const openCreateDrawer = () => {
                   entity_type: value,
                   client_id: "",
                   client_code: "",
+                  audit_id: "",
+                  audit_year: "",
+                  audit_start_date: "",
+                  audit_end_date: "",
                 }))
               }
             />
@@ -1056,6 +1133,50 @@ const openCreateDrawer = () => {
                   ...current,
                   client_id: value,
                   client_code: selectedEntity?.entity_code ?? "",
+                  audit_id: "",
+                  audit_year: "",
+                  audit_start_date: "",
+                  audit_end_date: "",
+                }));
+              }}
+            />
+
+            <CrudSelectField
+              label="Audit Master"
+              value={form.audit_id}
+              options={[
+                {
+                  value: "",
+                  label: auditMasterLoading
+                    ? "Loading Audit Master records..."
+                    : form.client_id
+                      ? "Select Audit Master"
+                      : "Select Client / Entity First",
+                },
+                ...auditMasters.map((audit) => ({
+                  value: String(audit.audit_id),
+                  label: `${
+                    audit.audit_name || `Audit #${audit.audit_id}`
+                  } | ${audit.audit_type} | ${audit.audit_year}`,
+                })),
+              ]}
+              required
+              onChange={(value) => {
+                const selectedAudit = auditMasters.find(
+                  (audit) => String(audit.audit_id) === value,
+                );
+
+                setForm((current) => ({
+                  ...current,
+                  audit_id: value,
+                  client_id: selectedAudit
+                    ? String(selectedAudit.client_id)
+                    : current.client_id,
+                  audit_year: selectedAudit?.audit_year ?? "",
+                  audit_start_date:
+                    selectedAudit?.audit_start_date ?? "",
+                  audit_end_date:
+                    selectedAudit?.audit_end_date ?? "",
                 }));
               }}
             />

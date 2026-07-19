@@ -13,18 +13,34 @@ export function useModuleActions(moduleKey: string) {
     const canInactive = hasAction(moduleKey, "inactive");
     const canRestore = hasAction(moduleKey, "restore");
     const canDelete = hasAction(moduleKey, "delete");
-    const canPermanentDelete = hasAction(moduleKey, "permanent_delete");
+    const canPermanentDelete = hasAction(
+      moduleKey,
+      "permanent_delete",
+    );
     const canExport = hasAction(moduleKey, "export");
     const canImport = hasAction(moduleKey, "import");
+    const canSubmit = hasAction(moduleKey, "submit");
+    const canRequestUnlock = hasAction(moduleKey, "request_unlock");
+    const canCancelUnlock = hasAction(moduleKey, "cancel_unlock");
+    const canApprove = hasAction(moduleKey, "approve");
+    const canReviewUnlock = hasAction(moduleKey, "review_unlock");
 
-    const showTopActions = canCreate || canExport || canImport;
+    const showTopActions =
+      canCreate ||
+      canExport ||
+      canImport;
 
     const showRowActions =
       canUpdate ||
       canInactive ||
       canRestore ||
       canDelete ||
-      canPermanentDelete;
+      canPermanentDelete ||
+      canSubmit ||
+      canRequestUnlock ||
+      canCancelUnlock ||
+      canApprove ||
+      canReviewUnlock;
 
     return {
       canView,
@@ -36,6 +52,11 @@ export function useModuleActions(moduleKey: string) {
       canPermanentDelete,
       canExport,
       canImport,
+      canSubmit,
+      canRequestUnlock,
+      canCancelUnlock,
+      canApprove,
+      canReviewUnlock,
       showTopActions,
       showRowActions,
     };

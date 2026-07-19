@@ -2,6 +2,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_entity import AuditEntity
+from app.models.audit_master import AuditMaster
 from app.models.meeting_master import MeetingMaster
 from app.schemas.meeting_master import MeetingMasterCreate
 
@@ -21,8 +22,10 @@ class MeetingMasterRepository:
 
         if search:
             search_term = f"%{search.strip()}%"
+
             filters.append(
                 or_(
+                    MeetingMaster.meeting_name.ilike(search_term),
                     MeetingMaster.meeting_type.ilike(search_term),
                     MeetingMaster.client_code.ilike(search_term),
                     MeetingMaster.audit_year.ilike(search_term),
@@ -35,7 +38,9 @@ class MeetingMasterRepository:
             filters.append(MeetingMaster.is_active == is_active)
 
         if meeting_type:
-            filters.append(MeetingMaster.meeting_type == meeting_type)
+            filters.append(
+                MeetingMaster.meeting_type == meeting_type
+            )
 
         if status:
             filters.append(MeetingMaster.status == status)
@@ -45,7 +50,9 @@ class MeetingMasterRepository:
     def _sort_column(self, sort_by: str):
         allowed_sort_columns = {
             "meeting_id": MeetingMaster.meeting_id,
+            "meeting_name": MeetingMaster.meeting_name,
             "meeting_type": MeetingMaster.meeting_type,
+            "audit_id": MeetingMaster.audit_id,
             "client_id": MeetingMaster.client_id,
             "client_code": MeetingMaster.client_code,
             "audit_year": MeetingMaster.audit_year,
@@ -58,7 +65,10 @@ class MeetingMasterRepository:
             "updated_at": MeetingMaster.updated_at,
         }
 
-        return allowed_sort_columns.get(sort_by, MeetingMaster.meeting_id)
+        return allowed_sort_columns.get(
+            sort_by,
+            MeetingMaster.meeting_id,
+        )
 
     async def list(
         self,
@@ -80,7 +90,10 @@ class MeetingMasterRepository:
 
         where_clause = and_(*filters) if filters else None
 
-        count_stmt = select(func.count()).select_from(MeetingMaster)
+        count_stmt = select(func.count()).select_from(
+            MeetingMaster
+        )
+
         if where_clause is not None:
             count_stmt = count_stmt.where(where_clause)
 
@@ -88,6 +101,7 @@ class MeetingMasterRepository:
         total = int(count_result.scalar_one() or 0)
 
         sort_column = self._sort_column(sort_by)
+
         if sort_order.lower() == "desc":
             sort_column = sort_column.desc()
         else:
@@ -98,17 +112,38 @@ class MeetingMasterRepository:
         if where_clause is not None:
             stmt = stmt.where(where_clause)
 
-        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        stmt = stmt.offset(
+            (page - 1) * page_size
+        ).limit(page_size)
 
         result = await self.db.execute(stmt)
         items = list(result.scalars().all())
 
         return items, total
 
-    async def get_by_id(self, meeting_id: int) -> MeetingMaster | None:
+    async def get_by_id(
+        self,
+        meeting_id: int,
+    ) -> MeetingMaster | None:
         result = await self.db.execute(
-            select(MeetingMaster).where(MeetingMaster.meeting_id == meeting_id)
+            select(MeetingMaster).where(
+                MeetingMaster.meeting_id == meeting_id
+            )
         )
+
+        return result.scalar_one_or_none()
+
+    async def get_active_audit_master_by_id(
+        self,
+        audit_id: int,
+    ) -> AuditMaster | None:
+        result = await self.db.execute(
+            select(AuditMaster).where(
+                AuditMaster.audit_id == audit_id,
+                AuditMaster.is_active.is_(True),
+            )
+        )
+
         return result.scalar_one_or_none()
 
     async def get_active_audit_entity_by_id(
@@ -121,6 +156,7 @@ class MeetingMasterRepository:
                 AuditEntity.is_active.is_(True),
             )
         )
+
         return result.scalar_one_or_none()
 
     async def create(
@@ -184,6 +220,9 @@ class MeetingMasterRepository:
 
         return item
 
-    async def permanent_delete(self, item: MeetingMaster) -> None:
+    async def permanent_delete(
+        self,
+        item: MeetingMaster,
+    ) -> None:
         await self.db.delete(item)
         await self.db.commit()

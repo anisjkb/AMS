@@ -37,6 +37,7 @@ from app.models.general_discussion import GeneralDiscussion
 from app.models.general_discussion_issue import GeneralDiscussionIssue
 from app.models.legal_status import LegalStatus
 from app.models.meeting_master import MeetingMaster
+from app.models.meeting_minute import EntranceMeetingMinute, ExitMeetingMinute
 from app.models.meeting_participant import MeetingParticipant
 from app.models.meeting_report import MeetingReport
 from app.models.menu import Menu
@@ -89,6 +90,8 @@ __all__ = [
     "GeneralDiscussion",
     "LegalStatus",
     "MeetingMaster",
+    "EntranceMeetingMinute",
+    "ExitMeetingMinute",
     "MeetingParticipant",
     "MeetingReport",
     "Menu",
@@ -104,3 +107,7 @@ __all__ = [
 ]
 
 from app.models.meeting_type import MeetingType
+
+from app.models.meeting_minute.exit_meeting_minute_unlock_request import ExitMeetingMinuteUnlockRequest
+from app.models.meeting_minute.exit_meeting_minute_snapshot import ExitMeetingMinuteSnapshot
+from app.models.meeting_minute.exit_meeting_minute_workflow_event import ExitMeetingMinuteWorkflowEvent

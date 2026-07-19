@@ -1,8 +1,13 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.meeting_master_repository import MeetingMasterRepository
-from app.schemas.meeting_master import MeetingMasterCreate, MeetingMasterUpdate
+from app.repositories.meeting_master_repository import (
+    MeetingMasterRepository,
+)
+from app.schemas.meeting_master import (
+    MeetingMasterCreate,
+    MeetingMasterUpdate,
+)
 
 
 class MeetingMasterService:
@@ -38,7 +43,10 @@ class MeetingMasterService:
             "items": items,
         }
 
-    async def get_meeting_master(self, meeting_id: int):
+    async def get_meeting_master(
+        self,
+        meeting_id: int,
+    ):
         item = await self.repository.get_by_id(meeting_id)
 
         if not item:
@@ -49,26 +57,60 @@ class MeetingMasterService:
 
         return item
 
-    async def _sync_client_reference(self, client_id: int) -> str:
-        entity = await self.repository.get_active_audit_entity_by_id(client_id)
+    async def _get_audit_reference_fields(
+        self,
+        audit_id: int,
+    ) -> dict:
+        audit = (
+            await self.repository.get_active_audit_master_by_id(
+                audit_id
+            )
+        )
+
+        if not audit:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Selected Audit Master record is invalid "
+                    "or inactive."
+                ),
+            )
+
+        entity = (
+            await self.repository.get_active_audit_entity_by_id(
+                audit.client_id
+            )
+        )
 
         if not entity:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Selected audit entity is invalid or inactive.",
+                detail=(
+                    "The client linked with the selected Audit "
+                    "Master is invalid or inactive."
+                ),
             )
 
-        return entity.entity_code
+        return {
+            "audit_id": audit.audit_id,
+            "client_id": audit.client_id,
+            "client_code": entity.entity_code,
+            "audit_year": audit.audit_year,
+            "audit_start_date": audit.audit_start_date,
+            "audit_end_date": audit.audit_end_date,
+        }
 
     async def create_meeting_master(
         self,
         payload: MeetingMasterCreate,
         created_by: str,
     ):
+        audit_fields = await self._get_audit_reference_fields(
+            payload.audit_id
+        )
+
         payload = payload.model_copy(
-            update={
-                "client_code": await self._sync_client_reference(payload.client_id),
-            }
+            update=audit_fields
         )
 
         item = await self.repository.create(
@@ -77,7 +119,9 @@ class MeetingMasterService:
         )
 
         return {
-            "message": "Meeting Master record created successfully.",
+            "message": (
+                "Meeting Master record created successfully."
+            ),
             "data": item,
         }
 
@@ -88,7 +132,10 @@ class MeetingMasterService:
         updated_by: str,
     ):
         item = await self.get_meeting_master(meeting_id)
-        update_data = payload.model_dump(exclude_unset=True)
+
+        update_data = payload.model_dump(
+            exclude_unset=True
+        )
 
         if not update_data:
             raise HTTPException(
@@ -96,21 +143,25 @@ class MeetingMasterService:
                 detail="No update data provided.",
             )
 
-        if "client_id" in update_data:
-            update_data["client_code"] = await self._sync_client_reference(
-                update_data["client_id"]
-            )
-        elif "client_code" in update_data:
-            update_data.pop("client_code")
+        resolved_audit_id = update_data.get(
+            "audit_id",
+            item.audit_id,
+        )
 
-        audit_start_date = update_data.get("audit_start_date", item.audit_start_date)
-        audit_end_date = update_data.get("audit_end_date", item.audit_end_date)
-
-        if audit_end_date < audit_start_date:
+        if resolved_audit_id is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Audit end date cannot be before audit start date.",
+                detail=(
+                    "Select an Audit Master record before "
+                    "updating this meeting."
+                ),
             )
+
+        audit_fields = await self._get_audit_reference_fields(
+            resolved_audit_id
+        )
+
+        update_data.update(audit_fields)
 
         updated_item = await self.repository.update(
             item=item,
@@ -119,7 +170,9 @@ class MeetingMasterService:
         )
 
         return {
-            "message": "Meeting Master record updated successfully.",
+            "message": (
+                "Meeting Master record updated successfully."
+            ),
             "data": updated_item,
         }
 
@@ -132,7 +185,9 @@ class MeetingMasterService:
 
         if not item.is_active:
             return {
-                "message": "Meeting Master record is already inactive.",
+                "message": (
+                    "Meeting Master record is already inactive."
+                ),
                 "data": item,
             }
 
@@ -142,7 +197,9 @@ class MeetingMasterService:
         )
 
         return {
-            "message": "Meeting Master record deactivated successfully.",
+            "message": (
+                "Meeting Master record deactivated successfully."
+            ),
             "data": item,
         }
 
@@ -155,7 +212,9 @@ class MeetingMasterService:
 
         if item.is_active:
             return {
-                "message": "Meeting Master record is already active.",
+                "message": (
+                    "Meeting Master record is already active."
+                ),
                 "data": item,
             }
 
@@ -165,16 +224,24 @@ class MeetingMasterService:
         )
 
         return {
-            "message": "Meeting Master record restored successfully.",
+            "message": (
+                "Meeting Master record restored successfully."
+            ),
             "data": item,
         }
 
-    async def permanent_delete_meeting_master(self, meeting_id: int):
+    async def permanent_delete_meeting_master(
+        self,
+        meeting_id: int,
+    ):
         item = await self.get_meeting_master(meeting_id)
 
         await self.repository.permanent_delete(item)
 
         return {
-            "message": "Meeting Master record permanently deleted successfully.",
+            "message": (
+                "Meeting Master record permanently deleted "
+                "successfully."
+            ),
             "data": None,
         }
