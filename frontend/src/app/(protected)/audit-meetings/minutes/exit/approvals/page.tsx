@@ -177,6 +177,7 @@ export default function ExitMeetingApprovalsPage() {
   );
 
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -410,6 +411,7 @@ export default function ExitMeetingApprovalsPage() {
     setReviewDecision("approve");
     setReviewComment("");
     setApprovedUntil(buildDefaultApprovedUntil());
+    setReviewError(null);
   };
 
   const openUnlockReview = (item: ExitMeetingUnlockReviewQueueItem) => {
@@ -420,6 +422,7 @@ export default function ExitMeetingApprovalsPage() {
     setReviewDecision("approve");
     setReviewComment("");
     setApprovedUntil(buildDefaultApprovedUntil());
+    setReviewError(null);
   };
 
   const closeReviewModal = () => {
@@ -429,42 +432,37 @@ export default function ExitMeetingApprovalsPage() {
     setReviewDecision("approve");
     setReviewComment("");
     setApprovedUntil(buildDefaultApprovedUntil());
+    setReviewError(null);
   };
 
   const handleReview = async () => {
     if (!reviewTarget) return;
 
     if (reviewTarget.kind === "lock" && !approvalActions.canApprove) {
-      setMessage({
-        type: "error",
-        text: "You do not have permission to review lock submissions.",
-      });
+      setReviewError(
+        "You do not have permission to review lock submissions.",
+      );
       return;
     }
 
     if (reviewTarget.kind === "unlock" && !approvalActions.canReviewUnlock) {
-      setMessage({
-        type: "error",
-        text: "You do not have permission to review unlock requests.",
-      });
+      setReviewError(
+        "You do not have permission to review unlock requests.",
+      );
       return;
     }
 
     const trimmedComment = reviewComment.trim();
 
     if (reviewDecision === "request_changes" && trimmedComment.length < 5) {
-      setMessage({
-        type: "error",
-        text: "A clear review comment is required when requesting changes.",
-      });
+      setReviewError(
+        "A clear review comment is required when requesting changes.",
+      );
       return;
     }
 
     if (reviewDecision === "reject" && trimmedComment.length < 5) {
-      setMessage({
-        type: "error",
-        text: "A rejection reason is required.",
-      });
+      setReviewError("A rejection reason is required.");
       return;
     }
 
@@ -473,15 +471,14 @@ export default function ExitMeetingApprovalsPage() {
       reviewDecision === "approve" &&
       !approvedUntil
     ) {
-      setMessage({
-        type: "error",
-        text: "Approved edit expiry date and time is required.",
-      });
+      setReviewError(
+        "Approved edit expiry date and time is required.",
+      );
       return;
     }
 
     setReviewLoading(true);
-    setMessage(null);
+    setReviewError(null);
 
     try {
       let response: { message: string };
@@ -516,10 +513,11 @@ export default function ExitMeetingApprovalsPage() {
         text: response.message,
       });
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Review action failed.",
-      });
+      setReviewError(
+        error instanceof Error
+          ? error.message
+          : "Review action failed.",
+      );
     } finally {
       setReviewLoading(false);
     }
@@ -1351,6 +1349,16 @@ export default function ExitMeetingApprovalsPage() {
                 className="mt-2 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
             </div>
+
+            {reviewError ? (
+              <div
+                role="alert"
+                className="mt-4 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700"
+              >
+                <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                <span>{reviewError}</span>
+              </div>
+            ) : null}
 
             <div className="mt-6 flex flex-wrap justify-between gap-3">
               <div className="flex gap-2">

@@ -650,6 +650,16 @@ class ExitMeetingWorkflowRepository:
         }
 
         for key, value in safe_values.items():
+            if (
+                key == "updated_at"
+                and isinstance(value, datetime)
+                and value.tzinfo is not None
+            ):
+                value = (
+                    value.astimezone(timezone.utc)
+                    .replace(tzinfo=None)
+                )
+
             setattr(minute, key, value)
 
         if increment_version:
