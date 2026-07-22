@@ -877,7 +877,10 @@ class ExitMeetingWorkflowRepository:
         minute.updated_by = (
             approved_by_user_id
         )
-        minute.updated_at = locked_at
+        minute.updated_at = (
+            locked_at.astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
 
         minute.workflow_version = (
             int(
