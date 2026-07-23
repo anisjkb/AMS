@@ -1,6 +1,7 @@
 """SQLAlchemy model registry imports for Alembic metadata discovery."""
 
 from app.models.audit_discussion_issue import AuditDiscussionIssue
+from app.models.audit_accept import AuditAcceptItem, AuditAcceptResponse, AuditAcceptTemplate
 from app.models.audit_entity import AuditEntity
 from app.models.audit_entity_address import AuditEntityAddressType
 from app.models.audit_entity_address import AuditEntityAddress
@@ -53,6 +54,9 @@ from app.models.user_role import UserRole
 
 __all__ = [
     "AuditDiscussionIssue",
+    "AuditAcceptTemplate",
+    "AuditAcceptItem",
+    "AuditAcceptResponse",
     "GeneralDiscussion",
     "GeneralDiscussionIssue",
     "AuditEntity",
