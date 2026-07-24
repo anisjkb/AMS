@@ -45,13 +45,12 @@ function formatAuditPeriod(startDate: string | null, endDate: string | null) {
   return start || end;
 }
 
-function buildFindingText(item: ExitMeetingFindingReportItem) {
-  const values = [
-    safeText(item.discussion_point),
-    safeText(item.observation_discussion),
-  ].filter(Boolean);
+function buildDiscussionPoint(item: ExitMeetingFindingReportItem) {
+  return safeText(item.discussion_point);
+}
 
-  return [...new Set(values)].join("\n\n");
+function buildFinding(item: ExitMeetingFindingReportItem) {
+  return safeText(item.observation_discussion);
 }
 
 function ParticipantTable({
@@ -109,9 +108,17 @@ function FindingsTable({
 
           <th className="visit-date-column">Visit Date</th>
 
-          <th>Findings / Discussion</th>
+          <th className="discussion-column">
+            Discussion Point
+          </th>
 
-          <th>Management Response / Decision</th>
+          <th>
+            Findings
+          </th>
+
+          <th>
+            Management Response / Decision
+          </th>
         </tr>
       </thead>
 
@@ -123,7 +130,13 @@ function FindingsTable({
 
               <td className="center-cell">{formatDate(finding.visit_date)}</td>
 
-              <td className="pre-line-cell">{buildFindingText(finding)}</td>
+              <td className="pre-line-cell">
+                {buildDiscussionPoint(finding)}
+              </td>
+
+              <td className="pre-line-cell">
+                {buildFinding(finding)}
+              </td>
 
               <td className="pre-line-cell">
                 {safeText(finding.observation_decision)}
@@ -570,6 +583,10 @@ export default function ExitMeetingReportPage() {
 
         .visit-date-column {
           width: 25mm;
+        }
+
+        .discussion-column {
+          width: 45mm;
         }
 
         .blank-signature-cell {
