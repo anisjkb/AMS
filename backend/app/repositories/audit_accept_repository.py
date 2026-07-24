@@ -17,6 +17,40 @@ class AuditAcceptRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+
+    async def list_active_audit_options(self) -> list[dict]:
+        result = await self.db.execute(
+            select(
+                AuditMaster.audit_id,
+                AuditMaster.audit_year,
+                AuditMaster.client_id,
+                AuditEntity.entity_name.label("client_name"),
+                AuditMaster.audit_name,
+                AuditMaster.audit_type,
+            )
+            .join(
+                AuditEntity,
+                AuditEntity.id == AuditMaster.client_id,
+            )
+            .where(
+                AuditMaster.is_active.is_(True),
+                AuditMaster.status == "active",
+                AuditEntity.is_active.is_(True),
+            )
+            .order_by(
+                AuditMaster.audit_year.desc(),
+                AuditEntity.entity_name.asc(),
+                AuditMaster.audit_name.asc().nullslast(),
+                AuditMaster.audit_id.asc(),
+            )
+        )
+
+        return [
+            dict(row)
+            for row in result.mappings().all()
+        ]
+
+
     async def get_audit_context(
         self,
         audit_id: int,

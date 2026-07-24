@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.audit_accept import (
     AuditAcceptBulkSaveRequest,
     AuditAcceptPageResponse,
+    AuditAcceptSelectorResponse,
     AuditAcceptSaveResponse,
 )
 from app.services.audit_accept.audit_accept_service import (
@@ -18,6 +19,23 @@ router = APIRouter(
     prefix="/audit-acceptance",
     tags=["Audit Acceptance Procedures"],
 )
+
+
+@router.get(
+    "/selector-options",
+    response_model=AuditAcceptSelectorResponse,
+)
+async def get_audit_acceptance_selector_options(
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(
+        require_permission(
+            "api.audit_accept_proce.view"
+        )
+    ),
+):
+    service = AuditAcceptService(db)
+
+    return await service.get_selector_options()
 
 
 @router.get(

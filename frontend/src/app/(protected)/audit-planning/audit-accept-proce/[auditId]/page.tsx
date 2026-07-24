@@ -6,9 +6,10 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   AlertCircle,
+  ArrowLeft,
   CalendarDays,
   CheckCircle2,
   ChevronsDown,
@@ -81,6 +82,8 @@ function formatDate(value: string | null) {
 }
 
 export default function AuditAcceptancePage() {
+  const router = useRouter();
+
   const params = useParams<{
     auditId: string;
   }>();
@@ -398,6 +401,21 @@ export default function AuditAcceptancePage() {
     );
   }
 
+  function handleBackToSelection() {
+    if (
+      isDirty &&
+      !window.confirm(
+        "You have unsaved changes. Return to Audit selection and discard them?",
+      )
+    ) {
+      return;
+    }
+
+    router.push(
+      "/audit-planning/audit-accept-proce",
+    );
+  }
+
   function handleRefresh() {
     if (
       isDirty &&
@@ -626,6 +644,19 @@ export default function AuditAcceptancePage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleBackToSelection}
+                className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white ring-1 ring-white/20 transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              >
+                <ArrowLeft
+                  size={16}
+                  aria-hidden="true"
+                />
+
+                Back to Audit Selection
+              </button>
+
               <span className="rounded-xl bg-white/10 px-3 py-2 text-xs font-bold ring-1 ring-white/20">
                 Audit #{data.audit.audit_id}
               </span>

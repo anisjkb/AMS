@@ -1,26 +1,52 @@
 "use client";
 
 import {
+  useCallback,
+  useEffect,
+  useMemo,
   useState,
   type FormEvent,
 } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   ArrowRight,
+  Building2,
+  CalendarDays,
   ClipboardCheck,
-  Hash,
-  ListChecks,
+  ClipboardList,
+  LoaderCircle,
   ShieldCheck,
 } from "lucide-react";
 
 import { useModuleActions } from "@/hooks/useModuleActions";
+import {
+  listAuditAcceptanceSelectorOptions,
+  type AuditAcceptSelectorItem,
+} from "@/services/auditAcceptanceProcedure";
 
 type PageMessage = {
   type: "error";
   text: string;
 };
+
+const selectClassName = [
+  "mt-2 min-h-12 w-full rounded-xl border border-slate-200",
+  "bg-white px-4 text-sm font-bold text-slate-900 outline-none",
+  "transition focus:border-slate-400 focus:ring-2",
+  "focus:ring-slate-200 focus:ring-offset-1",
+  "disabled:cursor-not-allowed disabled:bg-slate-100",
+  "disabled:text-slate-400",
+].join(" ");
+
+function buildAuditLabel(
+  audit: AuditAcceptSelectorItem,
+) {
+  const auditName =
+    audit.audit_name?.trim() || audit.audit_type;
+
+  return `${auditName} (Audit ID: ${audit.audit_id})`;
+}
 
 export default function AuditAcceptanceLauncherPage() {
   const router = useRouter();
@@ -28,36 +54,176 @@ export default function AuditAcceptanceLauncherPage() {
   const acceptanceActions =
     useModuleActions("audit_accept_proce");
 
-  const auditMasterActions =
-    useModuleActions("audit_master");
+  const [selectorItems, setSelectorItems] =
+    useState<AuditAcceptSelectorItem[]>([]);
 
-  const [auditIdInput, setAuditIdInput] =
+  const [selectedYear, setSelectedYear] =
     useState("");
+
+  const [selectedClientId, setSelectedClientId] =
+    useState("");
+
+  const [selectedAuditId, setSelectedAuditId] =
+    useState("");
+
+  const [isLoading, setIsLoading] =
+    useState(false);
 
   const [message, setMessage] =
     useState<PageMessage | null>(null);
 
-  const parsedAuditId =
-    Number.parseInt(
-      auditIdInput.trim(),
+  const loadSelectorOptions = useCallback(async () => {
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      const response =
+        await listAuditAcceptanceSelectorOptions();
+
+      setSelectorItems(response.items);
+    } catch (error) {
+      setSelectorItems([]);
+
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to load active Audit records.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!acceptanceActions.canView) return;
+
+    const timerId = window.setTimeout(() => {
+      void loadSelectorOptions();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [
+    acceptanceActions.canView,
+    loadSelectorOptions,
+  ]);
+
+  const yearOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        selectorItems
+          .map((item) => item.audit_year.trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) =>
+      right.localeCompare(
+        left,
+        undefined,
+        {
+          numeric: true,
+          sensitivity: "base",
+        },
+      ),
+    );
+  }, [selectorItems]);
+
+  const clientOptions = useMemo(() => {
+    if (!selectedYear) return [];
+
+    const clientMap = new Map<
+      number,
+      string
+    >();
+
+    selectorItems
+      .filter(
+        (item) =>
+          item.audit_year === selectedYear,
+      )
+      .forEach((item) => {
+        clientMap.set(
+          item.client_id,
+          item.client_name,
+        );
+      });
+
+    return Array.from(clientMap.entries())
+      .map(([clientId, clientName]) => ({
+        clientId,
+        clientName,
+      }))
+      .sort((left, right) =>
+        left.clientName.localeCompare(
+          right.clientName,
+        ),
+      );
+  }, [
+    selectedYear,
+    selectorItems,
+  ]);
+
+  const auditOptions = useMemo(() => {
+    if (
+      !selectedYear ||
+      !selectedClientId
+    ) {
+      return [];
+    }
+
+    const clientId = Number.parseInt(
+      selectedClientId,
       10,
     );
 
-  const hasValidAuditId =
-    Number.isInteger(parsedAuditId) &&
-    parsedAuditId > 0 &&
-    String(parsedAuditId) ===
-      auditIdInput.trim();
+    return selectorItems
+      .filter(
+        (item) =>
+          item.audit_year === selectedYear &&
+          item.client_id === clientId,
+      )
+      .sort((left, right) =>
+        buildAuditLabel(left).localeCompare(
+          buildAuditLabel(right),
+        ),
+      );
+  }, [
+    selectedClientId,
+    selectedYear,
+    selectorItems,
+  ]);
+
+  const selectedAudit = useMemo(() => {
+    if (!selectedAuditId) return null;
+
+    const auditId = Number.parseInt(
+      selectedAuditId,
+      10,
+    );
+
+    return (
+      auditOptions.find(
+        (audit) =>
+          audit.audit_id === auditId,
+      ) ?? null
+    );
+  }, [
+    auditOptions,
+    selectedAuditId,
+  ]);
 
   function handleSubmit(
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
 
-    if (!hasValidAuditId) {
+    if (!selectedAudit) {
       setMessage({
         type: "error",
-        text: "Enter a valid positive numeric Audit ID.",
+        text:
+          "Select Audit Year, Client and Audit Name before continuing.",
       });
 
       return;
@@ -66,7 +232,7 @@ export default function AuditAcceptanceLauncherPage() {
     setMessage(null);
 
     router.push(
-      `/audit-planning/audit-accept-proce/${parsedAuditId}`,
+      `/audit-planning/audit-accept-proce/${selectedAudit.audit_id}`,
     );
   }
 
@@ -117,8 +283,9 @@ export default function AuditAcceptanceLauncherPage() {
               </h1>
 
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                Open the Acceptance Procedures
-                questionnaire for a specific audit.
+                Select an active Audit by year,
+                client and Audit Name to open the
+                Acceptance Procedures questionnaire.
               </p>
             </div>
           </div>
@@ -132,7 +299,7 @@ export default function AuditAcceptanceLauncherPage() {
         >
           <div className="flex items-start gap-3">
             <div className="rounded-2xl bg-blue-50 p-3 text-blue-700">
-              <Hash
+              <ClipboardList
                 size={24}
                 aria-hidden="true"
               />
@@ -140,68 +307,209 @@ export default function AuditAcceptanceLauncherPage() {
 
             <div>
               <h2 className="text-lg font-black text-slate-900">
-                Enter Audit ID
+                Select Active Audit
               </h2>
 
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                Use the Audit ID from the Audit
-                Master record you want to review.
+                Complete the selections in order:
+                Audit Year, Client, then Audit Name.
               </p>
             </div>
           </div>
 
-          <div className="mt-6">
-            <label
-              htmlFor="acceptance-audit-id"
-              className="text-sm font-black text-slate-800"
+          {isLoading ? (
+            <div
+              role="status"
+              className="mt-6 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-600"
             >
-              Audit ID
-            </label>
+              <LoaderCircle
+                size={20}
+                aria-hidden="true"
+                className="animate-spin"
+              />
 
-            <input
-              id="acceptance-audit-id"
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              value={auditIdInput}
-              onChange={(event) => {
-                setAuditIdInput(
-                  event.target.value,
-                );
+              Loading active Audit records...
+            </div>
+          ) : null}
 
-                if (message) {
-                  setMessage(null);
+          {!isLoading &&
+          !message &&
+          selectorItems.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-800">
+              No active Audit records are currently
+              available for Acceptance Procedures.
+            </div>
+          ) : null}
+
+          <div className="mt-6 grid gap-5">
+            <div>
+              <label
+                htmlFor="acceptance-audit-year"
+                className="flex items-center gap-2 text-sm font-black text-slate-800"
+              >
+                <CalendarDays
+                  size={17}
+                  aria-hidden="true"
+                />
+                Audit Year
+              </label>
+
+              <select
+                id="acceptance-audit-year"
+                value={selectedYear}
+                disabled={
+                  isLoading ||
+                  yearOptions.length === 0
                 }
-              }}
-              placeholder="Example: 125"
-              aria-describedby="audit-id-help"
-              aria-invalid={
-                message ? true : undefined
-              }
-              className={[
-                "mt-2 min-h-12 w-full rounded-xl border bg-white px-4",
-                "text-base font-bold text-slate-900 outline-none transition",
-                "placeholder:text-slate-300",
-                "focus:ring-2 focus:ring-offset-1",
-                message
-                  ? "border-rose-300 focus:border-rose-400 focus:ring-rose-200"
-                  : "border-slate-200 focus:border-slate-400 focus:ring-slate-200",
-              ].join(" ")}
-            />
+                className={selectClassName}
+                onChange={(event) => {
+                  setSelectedYear(
+                    event.target.value,
+                  );
+                  setSelectedClientId("");
+                  setSelectedAuditId("");
+                  setMessage(null);
+                }}
+              >
+                <option value="">
+                  {isLoading
+                    ? "Loading Audit Years..."
+                    : "Select Audit Year"}
+                </option>
 
-            <p
-              id="audit-id-help"
-              className="mt-2 text-xs font-semibold text-slate-500"
-            >
-              Only positive whole numbers are
-              accepted.
-            </p>
+                {yearOptions.map((year) => (
+                  <option
+                    key={year}
+                    value={year}
+                  >
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="acceptance-client"
+                className="flex items-center gap-2 text-sm font-black text-slate-800"
+              >
+                <Building2
+                  size={17}
+                  aria-hidden="true"
+                />
+                Client
+              </label>
+
+              <select
+                id="acceptance-client"
+                value={selectedClientId}
+                disabled={
+                  !selectedYear ||
+                  clientOptions.length === 0
+                }
+                className={selectClassName}
+                onChange={(event) => {
+                  setSelectedClientId(
+                    event.target.value,
+                  );
+                  setSelectedAuditId("");
+                  setMessage(null);
+                }}
+              >
+                <option value="">
+                  {!selectedYear
+                    ? "Select Audit Year First"
+                    : clientOptions.length === 0
+                      ? "No Active Clients Available"
+                      : "Select Client"}
+                </option>
+
+                {clientOptions.map((client) => (
+                  <option
+                    key={client.clientId}
+                    value={String(
+                      client.clientId,
+                    )}
+                  >
+                    {client.clientName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="acceptance-audit"
+                className="flex items-center gap-2 text-sm font-black text-slate-800"
+              >
+                <ClipboardCheck
+                  size={17}
+                  aria-hidden="true"
+                />
+                Audit Name (Audit ID)
+              </label>
+
+              <select
+                id="acceptance-audit"
+                value={selectedAuditId}
+                disabled={
+                  !selectedClientId ||
+                  auditOptions.length === 0
+                }
+                className={selectClassName}
+                onChange={(event) => {
+                  setSelectedAuditId(
+                    event.target.value,
+                  );
+                  setMessage(null);
+                }}
+              >
+                <option value="">
+                  {!selectedClientId
+                    ? "Select Client First"
+                    : auditOptions.length === 0
+                      ? "No Active Audits Available"
+                      : "Select Audit Name"}
+                </option>
+
+                {auditOptions.map((audit) => (
+                  <option
+                    key={audit.audit_id}
+                    value={String(
+                      audit.audit_id,
+                    )}
+                  >
+                    {buildAuditLabel(audit)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          {selectedAudit ? (
+            <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-emerald-700">
+                Selected Audit
+              </p>
+
+              <p className="mt-1 font-black text-emerald-950">
+                {buildAuditLabel(selectedAudit)}
+              </p>
+
+              <p className="mt-1 text-sm font-semibold text-emerald-800">
+                {selectedAudit.client_name}
+                {" · "}
+                {selectedAudit.audit_type}
+                {" · "}
+                {selectedAudit.audit_year}
+              </p>
+            </section>
+          ) : null}
 
           {message ? (
             <div
               role="alert"
-              className="mt-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700"
+              className="mt-5 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700"
             >
               <AlertCircle
                 size={18}
@@ -217,7 +525,11 @@ export default function AuditAcceptanceLauncherPage() {
 
           <button
             type="submit"
-            className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 sm:w-auto"
+            disabled={
+              !selectedAudit ||
+              isLoading
+            }
+            className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
           >
             Open Acceptance Procedures
 
@@ -241,43 +553,29 @@ export default function AuditAcceptanceLauncherPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-sky-800">
-              This launcher does not require Audit
-              Master list permission. The selected
-              audit will still be validated by the
-              Acceptance Procedures API.
+              This selector uses the Acceptance
+              Procedures permission and does not
+              require Audit Master list access.
             </p>
           </section>
 
-          {auditMasterActions.canView ? (
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <ListChecks
-                size={24}
-                aria-hidden="true"
-                className="text-slate-700"
-              />
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <ClipboardList
+              size={24}
+              aria-hidden="true"
+              className="text-slate-700"
+            />
 
-              <h2 className="mt-3 font-black text-slate-900">
-                Find an Audit ID
-              </h2>
+            <h2 className="mt-3 font-black text-slate-900">
+              Active records only
+            </h2>
 
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Open Audit Master to search for an
-                existing audit record and its ID.
-              </p>
-
-              <Link
-                href="/audit-core/audit-master"
-                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-              >
-                Open Audit Master
-
-                <ArrowRight
-                  size={17}
-                  aria-hidden="true"
-                />
-              </Link>
-            </section>
-          ) : null}
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Only active Audit Masters linked to
+              active Clients are available in the
+              dropdowns.
+            </p>
+          </section>
         </aside>
       </div>
     </div>

@@ -22,6 +22,19 @@ export type AuditAcceptAuditContext = {
   year_end_date: string;
 };
 
+export type AuditAcceptSelectorItem = {
+  audit_id: number;
+  audit_year: string;
+  client_id: number;
+  client_name: string;
+  audit_name: string | null;
+  audit_type: string;
+};
+
+export type AuditAcceptSelectorResponse = {
+  items: AuditAcceptSelectorItem[];
+};
+
 export type AuditAcceptTemplate = {
   template_id: number;
   template_key: string;
@@ -105,6 +118,15 @@ async function requestJson<T>(
   }
 
   return (await response.json()) as T;
+}
+
+export async function listAuditAcceptanceSelectorOptions(): Promise<AuditAcceptSelectorResponse> {
+  return requestJson<AuditAcceptSelectorResponse>(
+    `${AUDIT_ACCEPTANCE_BASE_URL}/selector-options`,
+    {
+      method: "GET",
+    },
+  );
 }
 
 export async function getAuditAcceptancePage(

@@ -96,3 +96,16 @@ class AuditAcceptSaveResponse(BaseModel):
     message: str
     saved_count: int = Field(..., ge=0)
     data: AuditAcceptPageResponse
+
+
+class AuditAcceptSelectorItem(BaseModel):
+    audit_id: int
+    audit_year: str
+    client_id: int
+    client_name: str
+    audit_name: str | None
+    audit_type: str
+
+
+class AuditAcceptSelectorResponse(BaseModel):
+    items: list[AuditAcceptSelectorItem]

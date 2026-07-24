@@ -11,6 +11,14 @@ class AuditAcceptService:
     def __init__(self, db: AsyncSession):
         self.repository = AuditAcceptRepository(db)
 
+
+    async def get_selector_options(self) -> dict:
+        items = await self.repository.list_active_audit_options()
+
+        return {
+            "items": items,
+        }
+
     async def _get_audit_context(self, audit_id: int):
         context = await self.repository.get_audit_context(
             audit_id
