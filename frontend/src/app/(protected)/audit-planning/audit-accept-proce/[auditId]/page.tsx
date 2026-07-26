@@ -21,15 +21,29 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import AcceptanceCompletionPanel, {
+  buildAcceptanceCompletionFormState,
+  type AcceptanceCompletionFormState,
+} from "@/components/audit-acceptance/AcceptanceCompletionPanel";
 import AcceptanceSection from "@/components/audit-acceptance/AcceptanceSection";
+import AcceptanceWorkflowPanel, {
+  type AcceptanceSignFormState,
+} from "@/components/audit-acceptance/AcceptanceWorkflowPanel";
 import { useModuleActions } from "@/hooks/useModuleActions";
 
 import {
+  getAuditAcceptanceCompletionState,
   getAuditAcceptancePage,
+  listAuditAcceptanceSignerOptions,
+  saveAuditAcceptanceCompletion,
   saveAuditAcceptanceResponses,
+  signAuditAcceptanceEngagementPartner,
+  submitAuditAcceptanceCompletion,
   type AuditAcceptAnswerValue,
+  type AuditAcceptCompletionStateResponse,
   type AuditAcceptItem,
   type AuditAcceptPageResponse,
+  type AuditAcceptSignerOption,
 } from "@/services/auditAcceptanceProcedure";
 
 type PageMessage = {
@@ -43,6 +57,20 @@ type AnswerState = Record<
 >;
 
 const MODULE_KEY = "audit_accept_proce";
+
+const EDITABLE_WORKFLOW_STATUSES = new Set([
+  "draft",
+  "changes_requested",
+  "reopened",
+]);
+
+function nullableText(value: string) {
+  const trimmedValue = value.trim();
+
+  return trimmedValue.length > 0
+    ? trimmedValue
+    : null;
+}
 
 function buildAnswerState(
   items: AuditAcceptItem[],
@@ -117,6 +145,58 @@ export default function AuditAcceptancePage() {
 
   const [message, setMessage] =
     useState<PageMessage | null>(null);
+
+  const [
+    completionState,
+    setCompletionState,
+  ] =
+    useState<AuditAcceptCompletionStateResponse | null>(
+      null,
+    );
+
+  const [
+    completionForm,
+    setCompletionForm,
+  ] =
+    useState<AcceptanceCompletionFormState | null>(
+      null,
+    );
+
+  const [
+    completionDirty,
+    setCompletionDirty,
+  ] = useState(false);
+
+  const [
+    completionSaveLoading,
+    setCompletionSaveLoading,
+  ] = useState(false);
+
+  const [
+    signerOptions,
+    setSignerOptions,
+  ] = useState<AuditAcceptSignerOption[]>(
+    [],
+  );
+
+  const [
+    signForm,
+    setSignForm,
+  ] = useState<AcceptanceSignFormState>({
+    employee_id: "",
+    declaration_text: "",
+    remarks: "",
+  });
+
+  const [
+    workflowSubmitLoading,
+    setWorkflowSubmitLoading,
+  ] = useState(false);
+
+  const [
+    signLoading,
+    setSignLoading,
+  ] = useState(false);
 
   const sections = useMemo(
     () =>
@@ -193,15 +273,59 @@ export default function AuditAcceptancePage() {
         )
       : 0;
 
+  const workflowStatus =
+    completionState?.completion.workflow_status ??
+    "draft";
+
+  const workflowVersion =
+    completionState?.completion.workflow_version ??
+    1;
+
+  const workflowIsEditable =
+    completionState !== null &&
+    EDITABLE_WORKFLOW_STATUSES.has(
+      workflowStatus,
+    );
+
+  const canEditWorkflow =
+    acceptanceActions.canUpdate &&
+    workflowIsEditable;
+
+  const canSubmitWorkflow =
+    acceptanceActions.canSubmit &&
+    workflowIsEditable;
+
+  const canSignWorkflow =
+    acceptanceActions.canSign &&
+    workflowStatus ===
+      "pending_partner_signoff";
+
+  const isBusy =
+    submitLoading ||
+    completionSaveLoading ||
+    workflowSubmitLoading ||
+    signLoading;
+
+  const hasUnsavedChanges =
+    isDirty ||
+    completionDirty;
+
   async function loadPage() {
     setIsLoading(true);
     setMessage(null);
 
     try {
-      const response =
-        await getAuditAcceptancePage(
+      const [
+        response,
+        completionResponse,
+        signerResponse,
+      ] = await Promise.all([
+        getAuditAcceptancePage(auditId),
+        getAuditAcceptanceCompletionState(
           auditId,
-        );
+        ),
+        listAuditAcceptanceSignerOptions(),
+      ]);
 
       const sectionIds = response.items
         .filter(
@@ -220,9 +344,36 @@ export default function AuditAcceptancePage() {
       setOpenSectionIds(
         new Set(sectionIds),
       );
+
+      setCompletionState(
+        completionResponse,
+      );
+
+      setCompletionForm(
+        buildAcceptanceCompletionFormState(
+          completionResponse.completion,
+        ),
+      );
+
+      setSignerOptions(
+        signerResponse.items,
+      );
+
+      setSignForm({
+        employee_id: "",
+        declaration_text: "",
+        remarks: "",
+      });
+
       setIsDirty(false);
+      setCompletionDirty(false);
     } catch (error) {
       setData(null);
+      setCompletionState(null);
+      setCompletionForm(null);
+      setCompletionDirty(false);
+      setSignerOptions([]);
+
       setMessage({
         type: "error",
         text:
@@ -255,10 +406,17 @@ export default function AuditAcceptancePage() {
         setMessage(null);
 
         try {
-          const response =
-            await getAuditAcceptancePage(
+          const [
+            response,
+            completionResponse,
+            signerResponse,
+          ] = await Promise.all([
+            getAuditAcceptancePage(auditId),
+            getAuditAcceptanceCompletionState(
               auditId,
-            );
+            ),
+            listAuditAcceptanceSignerOptions(),
+          ]);
 
           if (isCancelled) {
             return;
@@ -285,13 +443,40 @@ export default function AuditAcceptancePage() {
           setOpenSectionIds(
             new Set(sectionIds),
           );
+
+          setCompletionState(
+            completionResponse,
+          );
+
+          setCompletionForm(
+            buildAcceptanceCompletionFormState(
+              completionResponse.completion,
+            ),
+          );
+
+          setSignerOptions(
+            signerResponse.items,
+          );
+
+          setSignForm({
+            employee_id: "",
+            declaration_text: "",
+            remarks: "",
+          });
+
           setIsDirty(false);
+          setCompletionDirty(false);
         } catch (error) {
           if (isCancelled) {
             return;
           }
 
           setData(null);
+          setCompletionState(null);
+          setCompletionForm(null);
+          setCompletionDirty(false);
+          setSignerOptions([]);
+
           setMessage({
             type: "error",
             text:
@@ -313,7 +498,7 @@ export default function AuditAcceptancePage() {
   }, [auditId]);
 
   useEffect(() => {
-    if (!isDirty) {
+    if (!hasUnsavedChanges) {
       return;
     }
 
@@ -334,15 +519,15 @@ export default function AuditAcceptancePage() {
         handleBeforeUnload,
       );
     };
-  }, [isDirty]);
+  }, [hasUnsavedChanges]);
 
   function handleAnswerChange(
     itemId: number,
     value: AuditAcceptAnswerValue | null,
   ) {
     if (
-      !acceptanceActions.canUpdate ||
-      submitLoading
+      !canEditWorkflow ||
+      isBusy
     ) {
       return;
     }
@@ -403,7 +588,7 @@ export default function AuditAcceptancePage() {
 
   function handleBackToSelection() {
     if (
-      isDirty &&
+      hasUnsavedChanges &&
       !window.confirm(
         "You have unsaved changes. Return to Audit selection and discard them?",
       )
@@ -418,7 +603,7 @@ export default function AuditAcceptancePage() {
 
   function handleRefresh() {
     if (
-      isDirty &&
+      hasUnsavedChanges &&
       !window.confirm(
         "Discard unsaved changes and reload the page?",
       )
@@ -436,8 +621,8 @@ export default function AuditAcceptancePage() {
 
     if (
       !data ||
-      !acceptanceActions.canUpdate ||
-      submitLoading ||
+      !canEditWorkflow ||
+      isBusy ||
       !isDirty
     ) {
       return;
@@ -497,6 +682,329 @@ export default function AuditAcceptancePage() {
       });
     } finally {
       setSubmitLoading(false);
+    }
+  }
+
+  function handleCompletionFieldChange<
+    K extends keyof AcceptanceCompletionFormState,
+  >(
+    field: K,
+    value: AcceptanceCompletionFormState[K],
+  ) {
+    if (
+      !canEditWorkflow ||
+      isBusy ||
+      !completionForm
+    ) {
+      return;
+    }
+
+    setCompletionForm({
+      ...completionForm,
+      [field]: value,
+    });
+
+    setCompletionDirty(true);
+  }
+
+  async function handleSaveCompletion() {
+    if (
+      !data ||
+      !completionState ||
+      !completionForm ||
+      !canEditWorkflow ||
+      isBusy ||
+      !completionDirty
+    ) {
+      return;
+    }
+
+    setCompletionSaveLoading(true);
+    setMessage(null);
+
+    try {
+      const response =
+        await saveAuditAcceptanceCompletion(
+          auditId,
+          {
+            template_id:
+              data.template.template_id,
+            file_no: nullableText(
+              completionForm.file_no,
+            ),
+            safeguards_text:
+              completionForm
+                .no_safeguard_required
+                ? null
+                : nullableText(
+                    completionForm
+                      .safeguards_text,
+                  ),
+            no_safeguard_required:
+              completionForm
+                .no_safeguard_required,
+            acceptance_decision:
+              completionForm
+                .acceptance_decision,
+            conclusion_remarks:
+              nullableText(
+                completionForm
+                  .conclusion_remarks,
+              ),
+            confirm_relevant_information:
+              completionForm
+                .confirm_relevant_information,
+            confirm_independence_evaluated:
+              completionForm
+                .confirm_independence_evaluated,
+            confirm_threats_addressed:
+              completionForm
+                .confirm_threats_addressed,
+            confirm_safeguards_applied:
+              completionForm
+                .confirm_safeguards_applied,
+            confirm_conclusion_documented:
+              completionForm
+                .confirm_conclusion_documented,
+            consultation_required:
+              completionForm
+                .consultation_required,
+            consultation_remarks:
+              completionForm
+                .consultation_required
+                ? nullableText(
+                    completionForm
+                      .consultation_remarks,
+                  )
+                : null,
+          },
+        );
+
+      setCompletionState({
+        ...completionState,
+        exists:
+          response.data.completion_id !==
+          null,
+        completion: response.data,
+      });
+
+      setCompletionForm(
+        buildAcceptanceCompletionFormState(
+          response.data,
+        ),
+      );
+
+      setCompletionDirty(false);
+
+      setMessage({
+        type: "success",
+        text: response.message,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to save Acceptance completion.",
+      });
+    } finally {
+      setCompletionSaveLoading(false);
+    }
+  }
+
+  function handleSignFormChange<
+    K extends keyof AcceptanceSignFormState,
+  >(
+    field: K,
+    value: AcceptanceSignFormState[K],
+  ) {
+    if (isBusy) {
+      return;
+    }
+
+    setSignForm({
+      ...signForm,
+      [field]: value,
+    });
+  }
+
+  async function handleSubmitWorkflow() {
+    if (
+      !completionState ||
+      !canSubmitWorkflow ||
+      !completionState.exists ||
+      isBusy
+    ) {
+      return;
+    }
+
+    if (hasUnsavedChanges) {
+      setMessage({
+        type: "error",
+        text:
+          "Save all questionnaire and completion changes before submitting.",
+      });
+      return;
+    }
+
+    if (
+      !window.confirm(
+        "Submit this Acceptance record for Engagement Partner sign-off? Editing will be locked after submission.",
+      )
+    ) {
+      return;
+    }
+
+    setWorkflowSubmitLoading(true);
+    setMessage(null);
+
+    try {
+      const response =
+        await submitAuditAcceptanceCompletion(
+          auditId,
+          {
+            expected_workflow_version:
+              workflowVersion,
+          },
+        );
+
+      setCompletionState({
+        ...completionState,
+        exists: true,
+        completion: response.data,
+      });
+
+      setCompletionForm(
+        buildAcceptanceCompletionFormState(
+          response.data,
+        ),
+      );
+
+      setCompletionDirty(false);
+
+      setMessage({
+        type: "success",
+        text: response.message,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to submit the Acceptance workflow.",
+      });
+    } finally {
+      setWorkflowSubmitLoading(false);
+    }
+  }
+
+  async function handleEngagementPartnerSign() {
+    if (
+      !completionState ||
+      !canSignWorkflow ||
+      isBusy
+    ) {
+      return;
+    }
+
+    const employeeId = Number(
+      signForm.employee_id,
+    );
+
+    if (
+      !Number.isInteger(employeeId) ||
+      employeeId <= 0
+    ) {
+      setMessage({
+        type: "error",
+        text:
+          "Select the Employee who is signing as Engagement Partner.",
+      });
+      return;
+    }
+
+    if (
+      !window.confirm(
+        "Apply the Engagement Partner sign-off using the selected Employee?",
+      )
+    ) {
+      return;
+    }
+
+    setSignLoading(true);
+    setMessage(null);
+
+    try {
+      const response =
+        await signAuditAcceptanceEngagementPartner(
+          auditId,
+          {
+            employee_id: employeeId,
+            expected_workflow_version:
+              workflowVersion,
+            declaration_text:
+              nullableText(
+                signForm.declaration_text,
+              ),
+            remarks: nullableText(
+              signForm.remarks,
+            ),
+          },
+        );
+
+      const nextSignoffs =
+        completionState.signoffs.filter(
+          (signoff) =>
+            !(
+              signoff.is_current &&
+              signoff.signoff_role ===
+                response.data.signoff
+                  .signoff_role &&
+              signoff.workflow_version ===
+                response.data.signoff
+                  .workflow_version
+            ),
+        );
+
+      setCompletionState({
+        ...completionState,
+        exists: true,
+        completion:
+          response.data.completion,
+        signoffs: [
+          ...nextSignoffs,
+          response.data.signoff,
+        ],
+      });
+
+      setCompletionForm(
+        buildAcceptanceCompletionFormState(
+          response.data.completion,
+        ),
+      );
+
+      setSignForm({
+        employee_id: "",
+        declaration_text: "",
+        remarks: "",
+      });
+
+      setMessage({
+        type: "success",
+        text: response.message,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Failed to apply the Engagement Partner sign-off.",
+      });
+    } finally {
+      setSignLoading(false);
     }
   }
 
@@ -665,9 +1173,9 @@ export default function AuditAcceptancePage() {
                 {data.audit.audit_year}
               </span>
 
-              {!acceptanceActions.canUpdate ? (
+              {!canEditWorkflow ? (
                 <span className="rounded-xl bg-amber-400/15 px-3 py-2 text-xs font-bold text-amber-200 ring-1 ring-amber-300/30">
-                  View only
+                  Workflow locked
                 </span>
               ) : null}
             </div>
@@ -839,6 +1347,73 @@ export default function AuditAcceptancePage() {
         </section>
       ) : null}
 
+      {completionState &&
+      completionForm ? (
+        <AcceptanceCompletionPanel
+          exists={completionState.exists}
+          workflowStatus={
+            workflowStatus
+          }
+          workflowVersion={
+            workflowVersion
+          }
+          form={completionForm}
+          canEdit={canEditWorkflow}
+          isDirty={completionDirty}
+          isSaving={
+            completionSaveLoading
+          }
+          onChange={
+            handleCompletionFieldChange
+          }
+          onSave={() =>
+            void handleSaveCompletion()
+          }
+        />
+      ) : null}
+
+      {completionState ? (
+        <AcceptanceWorkflowPanel
+          workflowStatus={
+            workflowStatus
+          }
+          workflowVersion={
+            workflowVersion
+          }
+          completionExists={
+            completionState.exists
+          }
+          signoffs={
+            completionState.signoffs
+          }
+          signerOptions={
+            signerOptions
+          }
+          canSubmit={
+            canSubmitWorkflow
+          }
+          canSign={canSignWorkflow}
+          hasUnsavedChanges={
+            hasUnsavedChanges
+          }
+          isBusy={isBusy}
+          isSubmitting={
+            workflowSubmitLoading
+          }
+          isSigning={signLoading}
+          signForm={signForm}
+          onSignFormChange={
+            handleSignFormChange
+          }
+          onSubmit={() =>
+            void handleSubmitWorkflow()
+          }
+          onSign={() =>
+            void handleEngagementPartnerSign()
+          }
+        />
+      ) : null}
+
       <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-black text-slate-900">
@@ -879,7 +1454,7 @@ export default function AuditAcceptancePage() {
           <button
             type="button"
             onClick={handleRefresh}
-            disabled={submitLoading}
+            disabled={isBusy}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
@@ -907,8 +1482,8 @@ export default function AuditAcceptancePage() {
                 section.item_id,
               )}
               disabled={
-                !acceptanceActions.canUpdate ||
-                submitLoading
+                !canEditWorkflow ||
+                isBusy
               }
               onToggle={() =>
                 toggleSection(
@@ -940,24 +1515,24 @@ export default function AuditAcceptancePage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-black text-slate-900">
-              {isDirty
+              {hasUnsavedChanges
                 ? "You have unsaved changes"
                 : "All changes are saved"}
             </p>
 
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              {acceptanceActions.canUpdate
+              {canEditWorkflow
                 ? `${answeredCount} of ${totalQuestionCount} questions currently answered.`
-                : "You have view-only access to this page."}
+                : "The current workflow is view-only."}
             </p>
           </div>
 
           <button
             type="submit"
             disabled={
-              !acceptanceActions.canUpdate ||
+              !canEditWorkflow ||
               !isDirty ||
-              submitLoading
+              isBusy
             }
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >

@@ -20,6 +20,7 @@ export function useModuleActions(moduleKey: string) {
     const canExport = hasAction(moduleKey, "export");
     const canImport = hasAction(moduleKey, "import");
     const canSubmit = hasAction(moduleKey, "submit");
+    const canSign = hasAction(moduleKey, "sign");
     const canRequestUnlock = hasAction(moduleKey, "request_unlock");
     const canCancelUnlock = hasAction(moduleKey, "cancel_unlock");
     const canApprove = hasAction(moduleKey, "approve");
@@ -37,6 +38,7 @@ export function useModuleActions(moduleKey: string) {
       canDelete ||
       canPermanentDelete ||
       canSubmit ||
+      canSign ||
       canRequestUnlock ||
       canCancelUnlock ||
       canApprove ||
@@ -53,6 +55,7 @@ export function useModuleActions(moduleKey: string) {
       canExport,
       canImport,
       canSubmit,
+      canSign,
       canRequestUnlock,
       canCancelUnlock,
       canApprove,

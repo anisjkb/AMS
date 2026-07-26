@@ -90,34 +90,145 @@ export type AuditAcceptSaveResponse = {
 const AUDIT_ACCEPTANCE_BASE_URL =
   "/api/backend/audit-acceptance";
 
+type ApiErrorRecord = Record<
+  string,
+  unknown
+>;
+
+function isApiErrorRecord(
+  value: unknown,
+): value is ApiErrorRecord {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function collectApiErrorMessages(
+  value: unknown,
+): string[] {
+  if (typeof value === "string") {
+    const message = value.trim();
+
+    return message ? [message] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(
+      collectApiErrorMessages,
+    );
+  }
+
+  if (!isApiErrorRecord(value)) {
+    return [];
+  }
+
+  const messages: string[] = [];
+
+  for (const key of [
+    "message",
+    "error",
+  ]) {
+    const directValue = value[key];
+
+    if (
+      typeof directValue === "string" &&
+      directValue.trim()
+    ) {
+      messages.push(
+        directValue.trim(),
+      );
+    }
+  }
+
+  const validationMessage =
+    typeof value.msg === "string"
+      ? value.msg.trim()
+      : "";
+
+  const location = Array.isArray(value.loc)
+    ? value.loc
+        .map((part) => String(part))
+        .filter(
+          (part) =>
+            part !== "body" &&
+            part !== "query" &&
+            part !== "path",
+        )
+        .join(".")
+    : "";
+
+  if (validationMessage) {
+    messages.push(
+      location
+        ? `${location}: ${validationMessage}`
+        : validationMessage,
+    );
+  }
+
+  for (const key of [
+    "detail",
+    "errors",
+    "validation_errors",
+  ]) {
+    if (key in value) {
+      messages.push(
+        ...collectApiErrorMessages(
+          value[key],
+        ),
+      );
+    }
+  }
+
+  return messages;
+}
+
+function formatAcceptanceApiError(
+  payload: unknown,
+  status: number,
+): string {
+  const messages = Array.from(
+    new Set(
+      collectApiErrorMessages(payload),
+    ),
+  );
+
+  if (messages.length > 0) {
+    return messages.join(" ");
+  }
+
+  return `Request failed with status ${status}.`;
+}
+
 async function requestJson<T>(
-  url: string,
-  options?: RequestInit,
+  input: string,
+  init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    credentials: "include",
+  const response = await fetch(input, {
+    ...init,
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(options?.headers ?? {}),
+      ...(init?.headers ?? {}),
     },
   });
 
-  if (!response.ok) {
-    const error = await response
+  const payload: unknown =
+    await response
       .json()
       .catch(() => null);
 
-    const message =
-      error?.detail ||
-      error?.message ||
-      "Acceptance Procedures request failed.";
-
-    throw new Error(message);
+  if (!response.ok) {
+    throw new Error(
+      formatAcceptanceApiError(
+        payload,
+        response.status,
+      ),
+    );
   }
 
-  return (await response.json()) as T;
+  return payload as T;
 }
 
 export async function listAuditAcceptanceSelectorOptions(): Promise<AuditAcceptSelectorResponse> {
@@ -148,6 +259,249 @@ export async function saveAuditAcceptanceResponses(
     `${AUDIT_ACCEPTANCE_BASE_URL}/${auditId}/responses`,
     {
       method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+
+export type AuditAcceptWorkflowStatus =
+  | "draft"
+  | "submitted"
+  | "pending_partner_signoff"
+  | "pending_consultation"
+  | "changes_requested"
+  | "completed"
+  | "reopened";
+
+export type AuditAcceptDecision =
+  | "accept"
+  | "accept_with_safeguards"
+  | "do_not_accept";
+
+export type AuditAcceptSignoffRole =
+  | "engagement_partner"
+  | "second_partner"
+  | "quality_reviewer";
+
+export type AuditAcceptCompletionAudit = {
+  audit_id: number;
+  client_id: number;
+  client_name: string;
+  audit_name: string | null;
+  audit_type: string | null;
+  audit_year: string;
+  year_end_date: string | null;
+};
+
+export type AuditAcceptCompletionTemplate = {
+  template_id: number;
+  template_key: string;
+  template_name: string;
+  reference_no: string | null;
+  version: string;
+};
+
+export type AuditAcceptCompletion = {
+  completion_id: number | null;
+  audit_id: number;
+  template_id: number;
+
+  template_key: string;
+  template_version: string;
+  reference_no: string | null;
+
+  file_no: string | null;
+
+  workflow_status: AuditAcceptWorkflowStatus;
+  workflow_version: number;
+
+  safeguards_text: string | null;
+  no_safeguard_required: boolean;
+
+  acceptance_decision:
+    | AuditAcceptDecision
+    | null;
+
+  conclusion_remarks: string | null;
+
+  confirm_relevant_information: boolean;
+  confirm_independence_evaluated: boolean;
+  confirm_threats_addressed: boolean;
+  confirm_safeguards_applied: boolean;
+  confirm_conclusion_documented: boolean;
+
+  consultation_required: boolean;
+  consultation_remarks: string | null;
+
+  submitted_by_user_id: string | null;
+  submitted_at: string | null;
+  completed_at: string | null;
+
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AuditAcceptSignoff = {
+  signoff_id: number;
+  completion_id: number;
+
+  signoff_role: AuditAcceptSignoffRole;
+  workflow_version: number;
+
+  signed_by_employee_id: number;
+  signed_by_user_id: string;
+
+  signed_by_name: string;
+  signed_by_designation: string | null;
+
+  declaration_text: string | null;
+  remarks: string | null;
+
+  signed_at: string;
+  is_current: boolean;
+
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AuditAcceptCompletionStateResponse = {
+  audit: AuditAcceptCompletionAudit;
+  template: AuditAcceptCompletionTemplate;
+  exists: boolean;
+  completion: AuditAcceptCompletion;
+  signoffs: AuditAcceptSignoff[];
+};
+
+export type AuditAcceptCompletionSavePayload = {
+  template_id: number;
+  file_no: string | null;
+
+  safeguards_text: string | null;
+  no_safeguard_required: boolean;
+
+  acceptance_decision:
+    | AuditAcceptDecision
+    | null;
+
+  conclusion_remarks: string | null;
+
+  confirm_relevant_information: boolean;
+  confirm_independence_evaluated: boolean;
+  confirm_threats_addressed: boolean;
+  confirm_safeguards_applied: boolean;
+  confirm_conclusion_documented: boolean;
+
+  consultation_required: boolean;
+  consultation_remarks: string | null;
+};
+
+export type AuditAcceptCompletionSaveResponse = {
+  message: string;
+  data: AuditAcceptCompletion;
+};
+
+export type AuditAcceptCompletionSubmitPayload = {
+  expected_workflow_version: number;
+};
+
+export type AuditAcceptCompletionSubmitResponse = {
+  message: string;
+  data: AuditAcceptCompletion;
+};
+
+export type AuditAcceptSignerOption = {
+  employee_id: number;
+  employee_code: string | null;
+  official_employee_id: string | null;
+
+  employee_name: string;
+
+  designation_id: number;
+  designation_name: string;
+
+  signature_url: string | null;
+};
+
+export type AuditAcceptSignerOptionsResponse = {
+  items: AuditAcceptSignerOption[];
+};
+
+export type AuditAcceptEngagementPartnerSignoffPayload = {
+  employee_id: number;
+  expected_workflow_version: number;
+  declaration_text: string | null;
+  remarks: string | null;
+};
+
+export type AuditAcceptEngagementPartnerSignoffData = {
+  completion: AuditAcceptCompletion;
+  signoff: AuditAcceptSignoff;
+};
+
+export type AuditAcceptEngagementPartnerSignoffResponse = {
+  message: string;
+  data: AuditAcceptEngagementPartnerSignoffData;
+};
+
+export async function getAuditAcceptanceCompletionState(
+  auditId: number,
+): Promise<AuditAcceptCompletionStateResponse> {
+  return requestJson<AuditAcceptCompletionStateResponse>(
+    `${AUDIT_ACCEPTANCE_BASE_URL}/${auditId}/completion`,
+    {
+      method: "GET",
+    },
+  );
+}
+
+export async function saveAuditAcceptanceCompletion(
+  auditId: number,
+  payload: AuditAcceptCompletionSavePayload,
+): Promise<AuditAcceptCompletionSaveResponse> {
+  return requestJson<AuditAcceptCompletionSaveResponse>(
+    `${AUDIT_ACCEPTANCE_BASE_URL}/${auditId}/completion`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function submitAuditAcceptanceCompletion(
+  auditId: number,
+  payload: AuditAcceptCompletionSubmitPayload,
+): Promise<AuditAcceptCompletionSubmitResponse> {
+  return requestJson<AuditAcceptCompletionSubmitResponse>(
+    `${AUDIT_ACCEPTANCE_BASE_URL}/${auditId}/completion/submit`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function listAuditAcceptanceSignerOptions(): Promise<AuditAcceptSignerOptionsResponse> {
+  return requestJson<AuditAcceptSignerOptionsResponse>(
+    `${AUDIT_ACCEPTANCE_BASE_URL}/signer-options`,
+    {
+      method: "GET",
+    },
+  );
+}
+
+export async function signAuditAcceptanceEngagementPartner(
+  auditId: number,
+  payload: AuditAcceptEngagementPartnerSignoffPayload,
+): Promise<AuditAcceptEngagementPartnerSignoffResponse> {
+  return requestJson<AuditAcceptEngagementPartnerSignoffResponse>(
+    `${AUDIT_ACCEPTANCE_BASE_URL}/${auditId}/completion/signoffs/engagement-partner`,
+    {
+      method: "POST",
       body: JSON.stringify(payload),
     },
   );
