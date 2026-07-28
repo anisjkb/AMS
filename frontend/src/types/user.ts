@@ -3,7 +3,8 @@
 export type User = {
   id: number;
   user_id: string;
-  email: string;
+  employee_id: number | null;
+  email: string | null;
   full_name: string;
   is_superuser: boolean;
   is_active: boolean;
@@ -21,19 +22,33 @@ export type UserListResponse = {
   total_pages: number;
 };
 
+export type UserEmployeeOption = {
+  employee_id: number;
+  employee_type: string;
+  employee_code: string;
+  official_employee_id: string | null;
+  employee_name: string;
+  email: string | null;
+  can_create_user: boolean;
+  blocking_reason: string | null;
+};
+
+export type UserEmployeeOptionsResponse = {
+  employee_types: string[];
+  items: UserEmployeeOption[];
+};
+
 export type UserPayload = {
   user_id: string;
-  email: string;
-  full_name: string;
-  password?: string;
+  employee_id: number;
+  password: string;
   is_superuser: boolean;
 };
 
 export type UserUpdatePayload = {
-  email?: string;
-  full_name?: string;
   password?: string;
   is_superuser?: boolean;
+  is_active?: boolean;
 };
 
 export type UserMessageResponse = {

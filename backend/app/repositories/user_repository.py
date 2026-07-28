@@ -3,6 +3,7 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.employee import Employee
 from app.models.user import User
 
 class UserRepository:
@@ -125,9 +126,85 @@ class UserRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_employee_id_any_status(
+        self,
+        employee_id: int,
+    ) -> User | None:
+        result = await self.db.execute(
+            select(User).where(
+                User.employee_id == employee_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_employee_by_id_any_status(
+        self,
+        employee_id: int,
+    ) -> Employee | None:
+        result = await self.db.execute(
+            select(Employee).where(
+                Employee.id == employee_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_available_employee_types(
+        self,
+    ) -> list[str]:
+        stmt = (
+            select(Employee.employee_type)
+            .outerjoin(
+                User,
+                User.employee_id == Employee.id,
+            )
+            .where(
+                Employee.is_active == True,  # noqa: E712
+                User.id.is_(None),
+                Employee.employee_type.is_not(None),
+                func.trim(Employee.employee_type) != "",
+            )
+            .distinct()
+            .order_by(Employee.employee_type.asc())
+        )
+
+        result = await self.db.execute(stmt)
+
+        return [
+            str(employee_type).strip()
+            for employee_type in result.scalars().all()
+            if employee_type
+            and str(employee_type).strip()
+        ]
+
+    async def list_available_employee_options(
+        self,
+        employee_type: str,
+    ) -> list[Employee]:
+        stmt = (
+            select(Employee)
+            .outerjoin(
+                User,
+                User.employee_id == Employee.id,
+            )
+            .where(
+                Employee.is_active == True,  # noqa: E712
+                User.id.is_(None),
+                Employee.employee_type == employee_type,
+            )
+            .order_by(
+                Employee.employee_name.asc(),
+                Employee.id.asc(),
+            )
+        )
+
+        result = await self.db.execute(stmt)
+
+        return list(result.scalars().all())
+
     async def create_user(
         self,
         user_id: str,
+        employee_id: int,
         full_name: str,
         hashed_password: str,
         email: str | None = None,
@@ -136,6 +213,7 @@ class UserRepository:
     ) -> User:
         user = User(
             user_id=user_id,
+            employee_id=employee_id,
             email=email,
             full_name=full_name,
             hashed_password=hashed_password,

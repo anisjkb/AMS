@@ -3,6 +3,7 @@
 
 import type {
   User,
+  UserEmployeeOptionsResponse,
   UserListResponse,
   UserMessageResponse,
   UserPayload,
@@ -148,6 +149,27 @@ export const getAllUsers = async (
     page_size: allItems.length,
     total_pages: 1,
   };
+};
+
+export const getUserEmployeeOptions = async (
+  employeeType?: string
+): Promise<UserEmployeeOptionsResponse> => {
+  const searchParams = new URLSearchParams();
+
+  if (employeeType?.trim()) {
+    searchParams.set(
+      "employee_type",
+      employeeType.trim()
+    );
+  }
+
+  const query = searchParams.toString();
+
+  return requestJson<UserEmployeeOptionsResponse>(
+    `/api/backend/users/employee-options${
+      query ? `?${query}` : ""
+    }`
+  );
 };
 
 export const createUser = async (

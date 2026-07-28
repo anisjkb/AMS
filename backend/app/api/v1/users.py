@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user import (
     UserCreate,
+    UserEmployeeOptionsResponse,
     UserListResponse,
     UserMeResponse,
     UserMessageResponse,
@@ -25,6 +26,27 @@ async def get_me(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
+
+@router.get(
+    "/employee-options",
+    response_model=UserEmployeeOptionsResponse,
+)
+async def list_user_employee_options(
+    employee_type: str | None = Query(
+        default=None,
+        max_length=100,
+    ),
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(
+        require_permission("api.user.create")
+    ),
+):
+    service = UserService(db)
+
+    return await service.list_employee_options(
+        employee_type=employee_type
+    )
 
 
 @router.get("", response_model=UserListResponse)
