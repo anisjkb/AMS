@@ -5,6 +5,7 @@ from app.api.v1 import general_discussion
 from app.api.v1.general_discussion_issue import router as general_discussion_issue_router
 from app.api.v1.audit_discussion_issues import router as audit_discussion_issues_router
 from app.api.v1.audit_acceptance import router as audit_acceptance_router
+from app.api.v1.audit_accept_consultation import router as audit_accept_consultation_router
 from app.api.v1.audit_entities import router as audit_entities_router
 from app.api.v1.audit_entity_addresses import router as audit_entity_addresses_router
 from app.api.v1.audit_entity_business_activities import router as audit_entity_business_activities_router
@@ -57,6 +58,7 @@ api_router = APIRouter()
 
 api_router.include_router(audit_discussion_issues_router)
 api_router.include_router(audit_acceptance_router)
+api_router.include_router(audit_accept_consultation_router)
 api_router.include_router(audit_entities_router)
 api_router.include_router(audit_entity_addresses_router)
 api_router.include_router(audit_entity_business_activities_router)
@@ -106,4 +108,6 @@ api_router.include_router(users_router)
 api_router.include_router(general_discussion_issue_router)
 
 api_router.include_router(general_discussion.router, prefix='/general-discussions', tags=['General Discussions'])
+
+
 

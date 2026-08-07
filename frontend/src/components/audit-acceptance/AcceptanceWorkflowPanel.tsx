@@ -292,7 +292,7 @@ export default function AcceptanceWorkflowPanel({
                           event.target.value,
                         )
                       }
-                      className="mt-2 min-h-11 w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      className="mt-2 min-h-11 w-full rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                     >
                       <option value="">
                         Select active Employee
@@ -351,7 +351,7 @@ export default function AcceptanceWorkflowPanel({
                       }
                       rows={3}
                       placeholder="Optional partner declaration."
-                      className="mt-2 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      className="mt-2 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-sm font-normal leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                     />
                   </div>
                 </div>
@@ -378,7 +378,7 @@ export default function AcceptanceWorkflowPanel({
                     }
                     rows={3}
                     placeholder="Optional sign-off remarks."
-                    className="mt-2 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                    className="mt-2 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-sm font-normal leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
                   />
                 </div>
 
@@ -516,7 +516,7 @@ export default function AcceptanceWorkflowPanel({
                   </p>
 
                   {signoff.declaration_text ? (
-                    <p className="mt-3 rounded-xl bg-white p-3 text-sm font-semibold leading-6 text-slate-700 ring-1 ring-slate-200">
+                    <p className="mt-3 rounded-xl bg-white p-3 text-sm font-normal leading-6 text-slate-700 ring-1 ring-slate-200">
                       {
                         signoff.declaration_text
                       }
@@ -524,7 +524,7 @@ export default function AcceptanceWorkflowPanel({
                   ) : null}
 
                   {signoff.remarks ? (
-                    <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">
+                    <p className="mt-3 text-sm font-normal leading-6 text-slate-600">
                       Remarks: {signoff.remarks}
                     </p>
                   ) : null}

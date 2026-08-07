@@ -329,12 +329,7 @@ export type AuditAcceptCompletion = {
   confirm_independence_evaluated: boolean;
   confirm_threats_addressed: boolean;
   confirm_safeguards_applied: boolean;
-  confirm_conclusion_documented: boolean;
-
-  consultation_required: boolean;
-  consultation_remarks: string | null;
-
-  submitted_by_user_id: string | null;
+  confirm_conclusion_documented: boolean;submitted_by_user_id: string | null;
   submitted_at: string | null;
   completed_at: string | null;
 
@@ -394,11 +389,7 @@ export type AuditAcceptCompletionSavePayload = {
   confirm_independence_evaluated: boolean;
   confirm_threats_addressed: boolean;
   confirm_safeguards_applied: boolean;
-  confirm_conclusion_documented: boolean;
-
-  consultation_required: boolean;
-  consultation_remarks: string | null;
-};
+  confirm_conclusion_documented: boolean;};
 
 export type AuditAcceptCompletionSaveResponse = {
   message: string;
@@ -506,3 +497,4 @@ export async function signAuditAcceptanceEngagementPartner(
     },
   );
 }
+

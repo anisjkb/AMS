@@ -1,8 +1,16 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.audit_accept import (
+    AuditAcceptConsultation,
+)
+
 from app.repositories.audit_accept_repository import (
     AuditAcceptRepository,
+)
+
+from app.repositories.audit_accept_consultation.audit_accept_consultation_repository import (
+    audit_accept_consultation_repository,
 )
 from app.schemas.audit_accept import (
     AuditAcceptBulkSaveRequest,
@@ -812,6 +820,32 @@ class AuditAcceptService:
             )
         )
 
+        if submitted_completion.consultation_required:
+
+            existing_requests = await (
+                audit_accept_consultation_repository.get_by_audit(
+                    self.repository.db,
+                    audit_id,
+                )
+            )
+
+            if not existing_requests:
+
+                consultation = AuditAcceptConsultation(
+                    audit_id=audit_id,
+                    completion_id=submitted_completion.completion_id,
+                    consultant_employee_id=1,
+                    assigned_by_user_id=submitted_by_user_id,
+                    status="pending",
+                )
+
+                await (
+                    audit_accept_consultation_repository.create(
+                        self.repository.db,
+                        consultation,
+                    )
+                )
+
         return {
             "message": (
                 "Acceptance Procedures submitted for "
@@ -979,3 +1013,7 @@ class AuditAcceptService:
                 ),
             },
         }
+
+
+
+

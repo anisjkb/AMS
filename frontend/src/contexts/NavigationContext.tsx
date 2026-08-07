@@ -25,6 +25,7 @@ type NavigationContextValue = {
   getMenuByKey: (menuKey: string) => NavigationMenu | undefined;
   getActionsByMenuKey: (menuKey: string) => NavigationAction[];
   hasAction: (menuKey: string, actionKey: string) => boolean;
+  hasPermission: (permissionKey: string) => boolean;
   reloadNavigation: () => Promise<void>;
 };
 
@@ -187,12 +188,22 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       );
     };
 
+    const hasPermission = (permissionKey: string) => {
+      return allMenus.some((menu) =>
+        menu.actions?.some(
+          (action) =>
+            action.permission_key === permissionKey
+        )
+      );
+    };
+
     return {
       navigation,
       loading,
       getMenuByKey,
       getActionsByMenuKey,
       hasAction,
+      hasPermission,
       reloadNavigation,
     };
   }, [navigation, loading, reloadNavigation]);
@@ -213,3 +224,6 @@ export function useNavigation() {
 
   return context;
 }
+
+
+

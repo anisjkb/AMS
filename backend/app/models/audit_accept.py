@@ -653,3 +653,104 @@ class AuditAcceptSignoff(
         server_default="true",
         nullable=False,
     )
+class AuditAcceptConsultation(
+    ActiveStatusMixin,
+    AuditMixin,
+    Base,
+):
+    __tablename__ = "audit_accept_consultations"
+
+    __table_args__ = (
+        CheckConstraint(
+            """
+            status IN
+            (
+                'pending',
+                'in_review',
+                'approved',
+                'returned'
+            )
+            """,
+            name="ck_audit_accept_consultations_status",
+        ),
+        CheckConstraint(
+            """
+            decision IS NULL
+            OR decision IN
+            (
+                'approve',
+                'return'
+            )
+            """,
+            name="ck_audit_accept_consultations_decision",
+        ),
+        Index(
+            "ix_audit_accept_consultations_completion_id",
+            "completion_id",
+        ),
+        Index(
+            "ix_audit_accept_consultations_consultant_employee_id",
+            "consultant_employee_id",
+        ),
+    )
+
+    consultation_id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+        nullable=False,
+    )
+
+    completion_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "audit_accept_completions.completion_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+
+    audit_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "audit_master.audit_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+    )
+
+    consultant_employee_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "employees.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+    )
+
+    assigned_by_user_id: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        default="pending",
+        server_default="pending",
+        nullable=False,
+    )
+
+    decision: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    remarks: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )

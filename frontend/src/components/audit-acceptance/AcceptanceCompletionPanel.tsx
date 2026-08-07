@@ -25,8 +25,6 @@ export type AcceptanceCompletionFormState = {
   confirm_threats_addressed: boolean;
   confirm_safeguards_applied: boolean;
   confirm_conclusion_documented: boolean;
-  consultation_required: boolean;
-  consultation_remarks: string;
 };
 
 type AcceptanceCompletionPanelProps = {
@@ -97,10 +95,6 @@ export function buildAcceptanceCompletionFormState(
       completion.confirm_safeguards_applied,
     confirm_conclusion_documented:
       completion.confirm_conclusion_documented,
-    consultation_required:
-      completion.consultation_required,
-    consultation_remarks:
-      completion.consultation_remarks ?? "",
   };
 }
 
@@ -145,7 +139,7 @@ export default function AcceptanceCompletionPanel({
 
             <div>
               <h2 className="text-lg font-black text-slate-900">
-                Acceptance Completion
+                Acceptance Conclusion
               </h2>
 
               <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
@@ -195,29 +189,7 @@ export default function AcceptanceCompletionPanel({
 
       <div className="space-y-6 p-5 sm:p-6">
         <div className="grid gap-5 lg:grid-cols-2">
-          <div>
-            <label
-              htmlFor="acceptance-file-no"
-              className="text-sm font-black text-slate-800"
-            >
-              File Number
-            </label>
 
-            <input
-              id="acceptance-file-no"
-              type="text"
-              value={form.file_no}
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onChange(
-                  "file_no",
-                  event.target.value,
-                )
-              }
-              placeholder="Enter audit file number"
-              className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-            />
-          </div>
 
           <div>
             <label
@@ -242,7 +214,7 @@ export default function AcceptanceCompletionPanel({
                     : null,
                 )
               }
-              className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+              className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
             >
               <option value="">
                 Select decision
@@ -276,7 +248,7 @@ export default function AcceptanceCompletionPanel({
                 Safeguards
               </h3>
 
-              <label className="mt-3 flex cursor-pointer items-start gap-3 text-sm font-semibold leading-6 text-sky-900">
+              <label className="mt-3 flex cursor-pointer items-start gap-3 text-sm font-normal leading-6 text-sky-900">
                 <input
                   type="checkbox"
                   checked={
@@ -312,7 +284,7 @@ export default function AcceptanceCompletionPanel({
                 }
                 rows={4}
                 placeholder="Describe identified threats and safeguards applied."
-                className="mt-4 w-full rounded-xl border border-sky-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                className="mt-4 w-full rounded-xl border border-sky-200 bg-white px-3 py-3 text-sm font-normal leading-6 text-slate-900 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100"
               />
             </div>
           </div>
@@ -338,7 +310,7 @@ export default function AcceptanceCompletionPanel({
             }
             rows={4}
             placeholder="Record the conclusion and supporting remarks."
-            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm font-normal leading-6 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
           />
         </div>
 
@@ -352,7 +324,7 @@ export default function AcceptanceCompletionPanel({
               ({ field, label }) => (
                 <label
                   key={field}
-                  className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-semibold leading-6 text-slate-700 transition hover:bg-slate-50"
+                  className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-normal leading-6 text-slate-700 transition hover:bg-slate-50"
                 >
                   <input
                     type="checkbox"
@@ -372,51 +344,7 @@ export default function AcceptanceCompletionPanel({
               ),
             )}
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
-          <label className="flex cursor-pointer items-start gap-3 text-sm font-black leading-6 text-violet-950">
-            <input
-              type="checkbox"
-              checked={
-                form.consultation_required
-              }
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onChange(
-                  "consultation_required",
-                  event.target.checked,
-                )
-              }
-              className="mt-1 h-4 w-4 rounded border-violet-300"
-            />
-
-            <span>
-              A second partner or specialist
-              consultation is required.
-            </span>
-          </label>
-
-          {form.consultation_required ? (
-            <textarea
-              value={
-                form.consultation_remarks
-              }
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onChange(
-                  "consultation_remarks",
-                  event.target.value,
-                )
-              }
-              rows={3}
-              placeholder="Describe the consultation requirement."
-              className="mt-4 w-full rounded-xl border border-violet-200 bg-white px-3 py-3 text-sm font-medium leading-6 text-slate-900 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-            />
-          ) : null}
-        </div>
-
-        <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        </div><div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm font-semibold text-slate-500">
             {isDirty
               ? "Completion details have unsaved changes."
@@ -446,10 +374,20 @@ export default function AcceptanceCompletionPanel({
 
             {isSaving
               ? "Saving Completion..."
-              : "Save Completion Draft"}
+              : "Save Draft"}
           </button>
         </div>
       </div>
     </section>
   );
 }
+
+
+
+
+
+
+
+
+
+

@@ -3,6 +3,7 @@
 from app.models.audit_discussion_issue import AuditDiscussionIssue
 from app.models.audit_accept import (
     AuditAcceptCompletion,
+    AuditAcceptConsultation,
     AuditAcceptItem,
     AuditAcceptResponse,
     AuditAcceptSignoff,
@@ -116,6 +117,7 @@ __all__ = [
     "RolePermission",
     "User",
     "UserRole",
+    "AuditAcceptConsultation",
 ]
 
 from app.models.meeting_type import MeetingType

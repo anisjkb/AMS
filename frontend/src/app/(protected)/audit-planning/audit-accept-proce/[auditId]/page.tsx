@@ -25,7 +25,13 @@ import AcceptanceCompletionPanel, {
   buildAcceptanceCompletionFormState,
   type AcceptanceCompletionFormState,
 } from "@/components/audit-acceptance/AcceptanceCompletionPanel";
+import AcceptanceReviewPanel, {
+  type AcceptanceYesResponse,
+} from "@/components/audit-acceptance/AcceptanceReviewPanel";
 import AcceptanceSection from "@/components/audit-acceptance/AcceptanceSection";
+import AcceptanceWizardStepper, {
+  type AcceptanceWizardStep,
+} from "@/components/audit-acceptance/AcceptanceWizardStepper";
 import AcceptanceWorkflowPanel, {
   type AcceptanceSignFormState,
 } from "@/components/audit-acceptance/AcceptanceWorkflowPanel";
@@ -111,6 +117,21 @@ function formatDate(value: string | null) {
 
 export default function AuditAcceptancePage() {
   const router = useRouter();
+
+  const [
+    pendingConfirmation,
+    setPendingConfirmation,
+  ] = useState<"back" | "refresh" | "submit" | "sign" | null>(
+    null,
+  );
+
+  const [activeStep, setActiveStep] =
+    useState<AcceptanceWizardStep>(1);
+
+  const [
+    showYesResponses,
+    setShowYesResponses,
+  ] = useState(false);
 
   const params = useParams<{
     auditId: string;
@@ -309,6 +330,214 @@ export default function AuditAcceptancePage() {
   const hasUnsavedChanges =
     isDirty ||
     completionDirty;
+
+  const requiredUnansweredCount =
+    useMemo(
+      () =>
+        answerableItems.filter(
+          (item) =>
+            item.is_required &&
+            answers[item.item_id] == null,
+        ).length,
+      [answerableItems, answers],
+    );
+
+  const yesResponses =
+    useMemo<AcceptanceYesResponse[]>(
+      () =>
+        answerableItems
+          .filter(
+            (item) =>
+              answers[item.item_id] ===
+              "yes",
+          )
+          .map((item) => {
+            const parentSection =
+              sections.find(
+                (section) =>
+                  section.item_id ===
+                  item.parent_item_id,
+              );
+
+            return {
+              itemId: item.item_id,
+              itemNo: item.item_no,
+              label:
+                item.title ||
+                item.content ||
+                item.item_key,
+              sectionTitle:
+                parentSection?.title ||
+                parentSection?.content ||
+                parentSection?.item_no ||
+                "Procedure section",
+            };
+          }),
+      [
+        answerableItems,
+        answers,
+        sections,
+      ],
+    );
+
+  const confirmationCount =
+    useMemo(() => {
+      if (!completionForm) {
+        return 0;
+      }
+
+      return [
+        completionForm
+          .confirm_relevant_information,
+        completionForm
+          .confirm_independence_evaluated,
+        completionForm
+          .confirm_threats_addressed,
+        completionForm
+          .confirm_safeguards_applied,
+        completionForm
+          .confirm_conclusion_documented,
+      ].filter(Boolean).length;
+    }, [completionForm]);
+
+  const completionValidationMessages =
+    useMemo(() => {
+      if (!completionForm) {
+        return [
+          "Acceptance Conclusion details are unavailable.",
+        ];
+      }
+
+      const issues: string[] = [];
+
+      if (
+        !completionForm.acceptance_decision
+      ) {
+        issues.push(
+          "Select an Acceptance Decision.",
+        );
+      }
+
+      if (
+        completionForm
+          .conclusion_remarks
+          .trim()
+          .length === 0
+      ) {
+        issues.push(
+          "Record the conclusion and supporting remarks.",
+        );
+      }
+
+      if (
+        !completionForm
+          .no_safeguard_required &&
+        completionForm
+          .safeguards_text
+          .trim()
+          .length === 0
+      ) {
+        issues.push(
+          "Describe the safeguards applied, or confirm that no safeguard is required.",
+        );
+      }
+
+      if (confirmationCount < 5) {
+        issues.push(
+          "Complete all five required confirmations.",
+        );
+      }
+
+
+      return issues;
+    }, [
+      completionForm,
+      confirmationCount,
+    ]);
+
+  const reviewReady =
+    requiredUnansweredCount === 0 &&
+    Boolean(completionState?.exists) &&
+    completionValidationMessages
+      .length === 0 &&
+    !hasUnsavedChanges;
+
+  const reviewValidationMessages =
+    useMemo(() => {
+      const issues: string[] = [];
+
+      if (requiredUnansweredCount > 0) {
+        issues.push(
+          `${requiredUnansweredCount} required procedure question${
+            requiredUnansweredCount === 1
+              ? ""
+              : "s"
+          } remain unanswered.`,
+        );
+      }
+
+      if (!completionState?.exists) {
+        issues.push(
+          "Save the Acceptance Conclusion draft.",
+        );
+      }
+
+      issues.push(
+        ...completionValidationMessages,
+      );
+
+      if (hasUnsavedChanges) {
+        issues.push(
+          "Save all current changes.",
+        );
+      }
+
+      return Array.from(
+        new Set(issues),
+      );
+    }, [
+      requiredUnansweredCount,
+      completionState?.exists,
+      completionValidationMessages,
+      hasUnsavedChanges,
+    ]);
+
+  const availableWizardSteps =
+    useMemo<AcceptanceWizardStep[]>(
+      () => {
+        if (!workflowIsEditable) {
+          return [3];
+        }
+
+        const steps:
+          AcceptanceWizardStep[] = [1];
+
+        if (
+          requiredUnansweredCount === 0 &&
+          !isDirty
+        ) {
+          steps.push(2);
+        }
+
+        if (reviewReady) {
+          steps.push(3);
+        }
+
+        return steps;
+      },
+      [
+        requiredUnansweredCount,
+        isDirty,
+        reviewReady,
+        workflowIsEditable,
+      ],
+    );
+
+  const displayedWizardStep:
+    AcceptanceWizardStep =
+      workflowIsEditable
+        ? activeStep
+        : 3;
 
   async function loadPage() {
     setIsLoading(true);
@@ -587,12 +816,8 @@ export default function AuditAcceptancePage() {
   }
 
   function handleBackToSelection() {
-    if (
-      hasUnsavedChanges &&
-      !window.confirm(
-        "You have unsaved changes. Return to Audit selection and discard them?",
-      )
-    ) {
+    if (hasUnsavedChanges) {
+      setPendingConfirmation("back");
       return;
     }
 
@@ -602,30 +827,55 @@ export default function AuditAcceptancePage() {
   }
 
   function handleRefresh() {
-    if (
-      hasUnsavedChanges &&
-      !window.confirm(
-        "Discard unsaved changes and reload the page?",
-      )
-    ) {
+    if (hasUnsavedChanges) {
+      setPendingConfirmation("refresh");
       return;
     }
 
     void loadPage();
   }
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
-    event.preventDefault();
+  function closeDiscardConfirmation() {
+    setPendingConfirmation(null);
+  }
 
+  function confirmDiscardChanges() {
+    const action = pendingConfirmation;
+
+    setPendingConfirmation(null);
+
+    if (action === "back") {
+      router.push(
+        "/audit-planning/audit-accept-proce",
+      );
+      return;
+    }
+
+    if (action === "refresh") {
+      void loadPage();
+      return;
+    }
+
+    if (action === "submit") {
+      void handleSubmitWorkflow(true);
+      return;
+    }
+
+    if (action === "sign") {
+      void handleEngagementPartnerSign(true);
+    }
+  }
+  async function saveQuestionnaireDraft() {
     if (
       !data ||
       !canEditWorkflow ||
-      isBusy ||
-      !isDirty
+      isBusy
     ) {
-      return;
+      return false;
+    }
+
+    if (!isDirty) {
+      return true;
     }
 
     if (answerableItems.length === 0) {
@@ -633,7 +883,8 @@ export default function AuditAcceptancePage() {
         type: "error",
         text: "No answerable Acceptance Procedure items were found.",
       });
-      return;
+
+      return false;
     }
 
     setSubmitLoading(true);
@@ -672,6 +923,8 @@ export default function AuditAcceptancePage() {
         type: "success",
         text: response.message,
       });
+
+      return true;
     } catch (error) {
       setMessage({
         type: "error",
@@ -680,9 +933,19 @@ export default function AuditAcceptancePage() {
             ? error.message
             : "Failed to save Acceptance Procedures.",
       });
+
+      return false;
     } finally {
       setSubmitLoading(false);
     }
+  }
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    await saveQuestionnaireDraft();
   }
 
   function handleCompletionFieldChange<
@@ -707,16 +970,19 @@ export default function AuditAcceptancePage() {
     setCompletionDirty(true);
   }
 
-  async function handleSaveCompletion() {
+  async function saveCompletionDraft() {
     if (
       !data ||
       !completionState ||
       !completionForm ||
       !canEditWorkflow ||
-      isBusy ||
-      !completionDirty
+      isBusy
     ) {
-      return;
+      return false;
+    }
+
+    if (!completionDirty) {
+      return completionState.exists;
     }
 
     setCompletionSaveLoading(true);
@@ -766,17 +1032,7 @@ export default function AuditAcceptancePage() {
             confirm_conclusion_documented:
               completionForm
                 .confirm_conclusion_documented,
-            consultation_required:
-              completionForm
-                .consultation_required,
-            consultation_remarks:
-              completionForm
-                .consultation_required
-                ? nullableText(
-                    completionForm
-                      .consultation_remarks,
-                  )
-                : null,
+
           },
         );
 
@@ -800,17 +1056,144 @@ export default function AuditAcceptancePage() {
         type: "success",
         text: response.message,
       });
+
+      return true;
     } catch (error) {
       setMessage({
         type: "error",
         text:
           error instanceof Error
             ? error.message
-            : "Failed to save Acceptance completion.",
+            : "Failed to save Acceptance Conclusion.",
       });
+
+      return false;
     } finally {
       setCompletionSaveLoading(false);
     }
+  }
+
+  async function handleSaveCompletion() {
+    await saveCompletionDraft();
+  }
+
+  async function handleSaveAndContinue() {
+    if (requiredUnansweredCount > 0) {
+      setMessage({
+        type: "error",
+        text:
+          `${requiredUnansweredCount} required procedure question${
+            requiredUnansweredCount === 1
+              ? ""
+              : "s"
+          } remain unanswered.`,
+      });
+
+      return;
+    }
+
+    const saved =
+      await saveQuestionnaireDraft();
+
+    if (!saved) {
+      return;
+    }
+
+    setActiveStep(2);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  async function handleSaveAndReview() {
+    if (
+      completionValidationMessages
+        .length > 0
+    ) {
+      setMessage({
+        type: "error",
+        text:
+          completionValidationMessages[0],
+      });
+
+      return;
+    }
+
+    const saved =
+      await saveCompletionDraft();
+
+    if (!saved) {
+      return;
+    }
+
+    setActiveStep(3);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  function handleWizardStepSelect(
+    step: AcceptanceWizardStep,
+  ) {
+    if (!workflowIsEditable) {
+      return;
+    }
+
+    if (step === displayedWizardStep) {
+      return;
+    }
+
+    if (
+      !availableWizardSteps.includes(
+        step,
+      )
+    ) {
+      return;
+    }
+
+    if (hasUnsavedChanges) {
+      setMessage({
+        type: "error",
+        text:
+          "Save the current changes before moving to another step.",
+      });
+
+      return;
+    }
+
+    setActiveStep(step);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  function handlePreviousWizardStep() {
+    if (hasUnsavedChanges) {
+      setMessage({
+        type: "error",
+        text:
+          "Save the current changes before returning to the previous step.",
+      });
+
+      return;
+    }
+
+    setActiveStep(
+      displayedWizardStep === 3
+        ? 2
+        : 1,
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   function handleSignFormChange<
@@ -829,7 +1212,7 @@ export default function AuditAcceptancePage() {
     });
   }
 
-  async function handleSubmitWorkflow() {
+  async function handleSubmitWorkflow(confirmed = false) {
     if (
       !completionState ||
       !canSubmitWorkflow ||
@@ -848,11 +1231,8 @@ export default function AuditAcceptancePage() {
       return;
     }
 
-    if (
-      !window.confirm(
-        "Submit this Acceptance record for Engagement Partner sign-off? Editing will be locked after submission.",
-      )
-    ) {
+    if (!confirmed) {
+      setPendingConfirmation("submit");
       return;
     }
 
@@ -900,7 +1280,7 @@ export default function AuditAcceptancePage() {
     }
   }
 
-  async function handleEngagementPartnerSign() {
+  async function handleEngagementPartnerSign(confirmed = false) {
     if (
       !completionState ||
       !canSignWorkflow ||
@@ -925,11 +1305,8 @@ export default function AuditAcceptancePage() {
       return;
     }
 
-    if (
-      !window.confirm(
-        "Apply the Engagement Partner sign-off using the selected Employee?",
-      )
-    ) {
+    if (!confirmed) {
+      setPendingConfirmation("sign");
       return;
     }
 
@@ -1281,7 +1658,7 @@ export default function AuditAcceptancePage() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-black text-slate-900">
-                  Completion progress
+                  Procedure progress
                 </p>
 
                 <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -1347,7 +1724,22 @@ export default function AuditAcceptancePage() {
         </section>
       ) : null}
 
-      {completionState &&
+      <AcceptanceWizardStepper
+        activeStep={
+          displayedWizardStep
+        }
+        availableSteps={
+          availableWizardSteps
+        }
+        onStepSelect={
+          workflowIsEditable
+            ? handleWizardStepSelect
+            : undefined
+        }
+      />
+
+      {displayedWizardStep === 2 &&
+      completionState &&
       completionForm ? (
         <AcceptanceCompletionPanel
           exists={completionState.exists}
@@ -1372,7 +1764,71 @@ export default function AuditAcceptancePage() {
         />
       ) : null}
 
-      {completionState ? (
+      {displayedWizardStep === 3 &&
+      completionState &&
+      completionForm ? (
+        <AcceptanceReviewPanel
+          clientName={
+            data.audit.client_name
+          }
+          auditName={
+            data.audit.audit_name
+          }
+          auditType={
+            data.audit.audit_type
+          }
+          auditYear={
+            data.audit.audit_year
+          }
+          auditId={
+            data.audit.audit_id
+          }
+          answeredCount={
+            answeredCount
+          }
+          totalQuestionCount={
+            totalQuestionCount
+          }
+          confirmationCount={
+            confirmationCount
+          }
+          acceptanceDecision={
+            completionForm
+              .acceptance_decision
+          }
+          noSafeguardRequired={
+            completionForm
+              .no_safeguard_required
+          }
+          safeguardsText={
+            completionForm
+              .safeguards_text
+          }
+          conclusionRemarks={
+            completionForm
+              .conclusion_remarks
+          }
+          yesResponses={
+            yesResponses
+          }
+          showYesResponses={
+            showYesResponses
+          }
+          onToggleYesResponses={() =>
+            setShowYesResponses(
+              (current) => !current,
+            )
+          }
+          reviewReady={reviewReady}
+          validationMessages={
+            reviewValidationMessages
+          }
+        />
+      ) : null}
+
+      {displayedWizardStep === 3 &&
+      completionState &&
+      !workflowIsEditable ? (
         <AcceptanceWorkflowPanel
           workflowStatus={
             workflowStatus
@@ -1414,10 +1870,12 @@ export default function AuditAcceptancePage() {
         />
       ) : null}
 
-      <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-black text-slate-900">
-            Procedure sections
+      {displayedWizardStep === 1 ? (
+        <>
+          <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-black text-slate-900">
+                Procedure sections
           </p>
 
           <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -1511,50 +1969,391 @@ export default function AuditAcceptancePage() {
         )}
       </div>
 
-      <section className="sticky bottom-4 z-30 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-black text-slate-900">
-              {hasUnsavedChanges
-                ? "You have unsaved changes"
-                : "All changes are saved"}
-            </p>
+        </>
+      ) : null}
 
-            <p className="mt-1 text-xs font-semibold text-slate-500">
-              {canEditWorkflow
-                ? `${answeredCount} of ${totalQuestionCount} questions currently answered.`
-                : "The current workflow is view-only."}
-            </p>
+{pendingConfirmation ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 px-4 py-8 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget
+            ) {
+              closeDiscardConfirmation();
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workflow-confirmation-title"
+            aria-describedby="workflow-confirmation-description"
+            className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/80 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.45)]"
+          >
+            <div
+              className={[
+                "border-b bg-gradient-to-r via-white p-6 sm:p-7",
+                pendingConfirmation === "sign"
+                  ? "border-violet-100 from-violet-50 to-indigo-50"
+                  : pendingConfirmation === "submit"
+                    ? "border-amber-100 from-amber-50 to-orange-50"
+                    : "border-rose-100 from-rose-50 to-amber-50",
+              ].join(" ")}
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className={[
+                    "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ring-8",
+                    pendingConfirmation === "sign"
+                      ? "bg-violet-100 text-violet-700 ring-violet-50"
+                      : pendingConfirmation === "submit"
+                        ? "bg-amber-100 text-amber-700 ring-amber-50"
+                        : "bg-rose-100 text-rose-700 ring-rose-50",
+                  ].join(" ")}
+                >
+                  <AlertCircle
+                    size={24}
+                    strokeWidth={2.4}
+                    aria-hidden="true"
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={[
+                      "text-xs font-black uppercase tracking-[0.18em]",
+                      pendingConfirmation === "sign"
+                        ? "text-violet-700"
+                        : pendingConfirmation === "submit"
+                          ? "text-amber-700"
+                          : "text-rose-700",
+                    ].join(" ")}
+                  >
+                    {pendingConfirmation === "submit" ||
+                    pendingConfirmation === "sign"
+                      ? "Confirmation required"
+                      : "Action required"}
+                  </p>
+
+                  <h2
+                    id="workflow-confirmation-title"
+                    className="mt-1 text-2xl font-black tracking-tight text-slate-950"
+                  >
+                    {pendingConfirmation === "submit"
+                      ? "Submit for Partner Sign-off"
+                      : pendingConfirmation === "sign"
+                        ? "Confirm Engagement Partner Sign-off"
+                        : "Unsaved changes"}
+                  </h2>
+
+                  <p
+                    id="workflow-confirmation-description"
+                    className="mt-2 text-sm font-normal leading-6 text-slate-600"
+                  >
+                    {pendingConfirmation === "back"
+                      ? "Returning to Audit Selection will discard the changes made on this page."
+                      : pendingConfirmation === "refresh"
+                        ? "Reloading this page will discard the changes made since your last save."
+                        : pendingConfirmation === "submit"
+                          ? "This acceptance record will be submitted for Engagement Partner review. Editing will be locked after submission."
+                          : "The selected Employee will be recorded as the Engagement Partner signer for the current workflow version."}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="Close confirmation"
+                  onClick={closeDiscardConfirmation}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xl font-medium text-slate-400 transition hover:bg-white hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-6 sm:p-7">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">
+                      {pendingConfirmation === "submit"
+                        ? "Submission review"
+                        : pendingConfirmation === "sign"
+                          ? "Sign-off review"
+                          : "Current questionnaire"}
+                    </p>
+
+                    <p className="mt-1 text-xs font-normal leading-5 text-slate-500">
+                      {pendingConfirmation === "submit"
+                        ? "Saved answers and conclusion details will be sent for Partner review."
+                        : pendingConfirmation === "sign"
+                          ? "Review the selected signer and sign-off details before confirming."
+                          : "Previously saved information will remain unchanged."}
+                    </p>
+                  </div>
+
+                  <div className="shrink-0 rounded-xl bg-white px-4 py-2 text-center shadow-sm ring-1 ring-slate-200">
+                    <p className="text-lg font-black text-slate-950">
+                      {answeredCount}/{totalQuestionCount}
+                    </p>
+
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                      Answered
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeDiscardConfirmation}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+                >
+                  {pendingConfirmation === "submit"
+                    ? "Continue reviewing"
+                    : pendingConfirmation === "sign"
+                      ? "Review again"
+                      : "Keep editing"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmDiscardChanges}
+                  disabled={isBusy}
+                  className={[
+                    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-black text-white shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+                    pendingConfirmation === "sign"
+                      ? "bg-violet-700 shadow-violet-700/20 hover:bg-violet-600 focus-visible:ring-violet-500"
+                      : pendingConfirmation === "submit"
+                        ? "bg-amber-700 shadow-amber-700/20 hover:bg-amber-600 focus-visible:ring-amber-500"
+                        : "bg-rose-600 shadow-rose-600/20 hover:bg-rose-700 focus-visible:ring-rose-500",
+                  ].join(" ")}
+                >
+                  {pendingConfirmation === "back"
+                    ? "Discard & return"
+                    : pendingConfirmation === "refresh"
+                      ? "Discard & reload"
+                      : pendingConfirmation === "submit"
+                        ? "Submit for review"
+                        : "Confirm sign-off"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      <section className="sticky bottom-3 z-30 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2.5 shadow-xl backdrop-blur sm:px-4">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="inline-flex min-h-8 items-center rounded-lg bg-slate-950 px-3 text-xs font-black text-white">
+              Step {displayedWizardStep}/3
+            </span>
+
+            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700">
+              <span className="text-slate-500">
+                Answered
+              </span>
+
+              <strong className="text-slate-950">
+                {answeredCount}/{totalQuestionCount}
+              </strong>
+            </span>
+
+            <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700">
+              <span className="text-rose-500">
+                Yes
+              </span>
+
+              <strong>
+                {yesResponses.length}
+              </strong>
+            </span>
+
+            {displayedWizardStep >= 2 ? (
+              <>
+                <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-xs font-bold text-violet-700">
+                  <span className="text-violet-500">
+                    Declarations
+                  </span>
+
+                  <strong>
+                    {confirmationCount}/5
+                  </strong>
+                </span>
+
+                <span className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 text-xs font-bold capitalize text-sky-700">
+                  <span className="text-sky-500">
+                    Decision
+                  </span>
+
+                  <strong>
+                    {completionForm
+                      ?.acceptance_decision
+                      ? completionForm
+                          .acceptance_decision
+                          .split("_")
+                          .join(" ")
+                      : "Pending"}
+                  </strong>
+                </span>
+              </>
+            ) : null}
+
+            <span
+              className={[
+                "inline-flex min-h-8 items-center rounded-lg px-3 text-xs font-black",
+                !workflowIsEditable
+                  ? "bg-slate-100 text-slate-700"
+                  : hasUnsavedChanges
+                    ? "bg-amber-100 text-amber-800"
+                    : displayedWizardStep === 3 &&
+                        reviewReady
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-emerald-50 text-emerald-700",
+              ].join(" ")}
+            >
+              {!workflowIsEditable
+                ? workflowStatus
+                    .split("_")
+                    .join(" ")
+                : hasUnsavedChanges
+                  ? "Unsaved changes"
+                  : displayedWizardStep === 3 &&
+                      reviewReady
+                    ? "Ready to submit"
+                    : "Saved"}
+            </span>
           </div>
 
-          <button
-            type="submit"
-            disabled={
-              !canEditWorkflow ||
-              !isDirty ||
-              isBusy
-            }
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitLoading ? (
-              <Loader2
-                size={18}
-                aria-hidden="true"
-                className="animate-spin"
-              />
-            ) : (
-              <Save
-                size={18}
-                aria-hidden="true"
-              />
-            )}
+          {displayedWizardStep === 1 ? (
+            <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+              <button
+                type="submit"
+                disabled={
+                  !canEditWorkflow ||
+                  !isDirty ||
+                  isBusy
+                }
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {submitLoading ? (
+                  <Loader2
+                    size={16}
+                    aria-hidden="true"
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Save
+                    size={16}
+                    aria-hidden="true"
+                  />
+                )}
 
-            {submitLoading
-              ? "Saving..."
-              : "Save Responses"}
-          </button>
+                {submitLoading
+                  ? "Saving..."
+                  : "Save Draft"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void handleSaveAndContinue()
+                }
+                disabled={
+                  !canEditWorkflow ||
+                  isBusy
+                }
+                className="inline-flex min-h-9 items-center justify-center rounded-lg bg-violet-700 px-3.5 py-2 text-xs font-black text-white transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save & Continue
+              </button>
+            </div>
+          ) : null}
+
+          {displayedWizardStep === 2 ? (
+            <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={
+                  handlePreviousWizardStep
+                }
+                disabled={isBusy}
+                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void handleSaveAndReview()
+                }
+                disabled={
+                  !canEditWorkflow ||
+                  isBusy
+                }
+                className="inline-flex min-h-9 items-center justify-center rounded-lg bg-violet-700 px-3.5 py-2 text-xs font-black text-white transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save & Review
+              </button>
+            </div>
+          ) : null}
+
+          {displayedWizardStep === 3 ? (
+            <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+              {workflowIsEditable ? (
+                <button
+                  type="button"
+                  onClick={
+                    handlePreviousWizardStep
+                  }
+                  disabled={isBusy}
+                  className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+              ) : null}
+
+              {workflowIsEditable ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleSubmitWorkflow()
+                  }
+                  disabled={
+                    !reviewReady ||
+                    !canSubmitWorkflow ||
+                    isBusy
+                  }
+                  className="inline-flex min-h-9 items-center justify-center rounded-lg bg-amber-700 px-3.5 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {workflowSubmitLoading
+                    ? "Submitting..."
+                    : "Submit for Partner Sign-off"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
     </form>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

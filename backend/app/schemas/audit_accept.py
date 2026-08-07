@@ -425,3 +425,68 @@ class AuditAcceptEngagementPartnerSignoffResponse(
 ):
     message: str
     data: AuditAcceptEngagementPartnerSignoffData
+
+# ================================
+# Audit Accept Consultation
+# ================================
+
+
+AuditAcceptConsultationStatus = Literal[
+    "pending",
+    "in_review",
+    "approved",
+    "returned",
+]
+
+
+AuditAcceptConsultationDecision = Literal[
+    "approve",
+    "return",
+]
+
+
+class AuditAcceptConsultationCreate(BaseModel):
+
+    completion_id: int
+    audit_id: int
+    consultant_employee_id: int
+
+
+class AuditAcceptConsultationUpdate(BaseModel):
+
+    decision: AuditAcceptConsultationDecision | None = None
+    remarks: str | None = None
+
+
+class AuditAcceptConsultationResponse(BaseModel):
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+    consultation_id: int
+    completion_id: int
+    audit_id: int
+
+    consultant_employee_id: int
+
+    assigned_by_user_id: str | None = None
+
+    status: AuditAcceptConsultationStatus
+
+    decision: AuditAcceptConsultationDecision | None = None
+
+    remarks: str | None = None
+
+    reviewed_at: datetime | None = None
+
+    created_at: datetime
+    updated_at: datetime
+
+# Audit Accept Consultant Employee
+
+class AuditConsultantEmployeeResponse(BaseModel):
+    id: int
+    employee_name: str
+    designation_name: str | None = None
+
