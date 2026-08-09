@@ -25,6 +25,7 @@ import CrudSelectField from "@/components/crud/fields/CrudSelectField";
 import CrudTextAreaField from "@/components/crud/fields/CrudTextAreaField";
 import CrudTextField from "@/components/crud/fields/CrudTextField";
 import { listAuditTeams, type AuditTeam } from "@/services/auditTeam";
+import { listAuditTeamMemberRoles, type AuditTeamMemberRole } from "@/services/auditTeamMemberRole";
 import { getAllEmployees } from "@/services/employee";
 import type { Employee } from "@/types/employee";
 import {
@@ -74,14 +75,7 @@ const statusOptions = [
   { value: "inactive", label: "Inactive" },
 ];
 
-const roleOptions = [
-  { value: "Team Lead", label: "Team Lead" },
-  { value: "Team Supervisor", label: "Team Supervisor" },
-  { value: "Senior Auditor", label: "Senior Auditor" },
-  { value: "Auditor", label: "Auditor" },
-  { value: "Assistant Auditor", label: "Assistant Auditor" },
-  { value: "Reviewer", label: "Reviewer" },
-];
+
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "-";
@@ -144,6 +138,7 @@ export default function AuditTeamMembersPage() {
 
   const [teamOptions, setTeamOptions] = useState<AuditTeam[]>([]);
   const [employeeOptions, setEmployeeOptions] = useState<Employee[]>([]);
+const [roleOptions, setRoleOptions] = useState<AuditTeamMemberRole[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -254,7 +249,7 @@ export default function AuditTeamMembersPage() {
     setCatalogLoading(true);
 
     try {
-      const [teamsResponse, employeesResponse] = await Promise.all([
+      const [teamsResponse, employeesResponse, rolesResponse] = await Promise.all([
         listAuditTeams({
           page: 1,
           pageSize: 100,
@@ -267,13 +262,16 @@ export default function AuditTeamMembersPage() {
           sortBy: "employee_name",
           sortOrder: "asc",
         }),
+      listAuditTeamMemberRoles(),
       ]);
 
       setTeamOptions(teamsResponse.items);
       setEmployeeOptions(employeesResponse.items);
+  setRoleOptions(rolesResponse);
     } catch {
-      setTeamOptions([]);
-      setEmployeeOptions([]);
+    setTeamOptions([]);
+    setEmployeeOptions([]);
+    setRoleOptions([]);
     } finally {
       setCatalogLoading(false);
     }
@@ -817,9 +815,12 @@ export default function AuditTeamMembersPage() {
               label="Team Member Role"
               value={form.team_member_role}
               options={[
-                { value: "", label: "Select Role" },
-                ...roleOptions,
-              ]}
+              { value: "", label: "Select Role" },
+              ...roleOptions.map((role) => ({
+                value: role.role_name,
+                label: role.role_name,
+              })),
+            ]}
               onChange={(value) =>
                 setForm((current) => ({
                   ...current,
@@ -916,3 +917,22 @@ export default function AuditTeamMembersPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

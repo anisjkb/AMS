@@ -52,6 +52,7 @@ from app.api.v1.role_permissions import router as role_permissions_router
 from app.api.v1.roles import router as roles_router
 from app.api.v1.user_roles import router as user_roles_router
 from app.api.v1.users import router as users_router
+from app.api.v1 import audit_team_member_roles
 
 
 api_router = APIRouter()
@@ -107,6 +108,7 @@ api_router.include_router(user_roles_router)
 api_router.include_router(users_router)
 api_router.include_router(general_discussion_issue_router)
 
+api_router.include_router(audit_team_member_roles.router)
 api_router.include_router(general_discussion.router, prefix='/general-discussions', tags=['General Discussions'])
 
 
